@@ -20,6 +20,9 @@
 /* Number of timer ticks since OS booted. */
 static int64_t ticks;
 
+/* List of alarms required for waking sleeping threads. */
+struct list alarms;
+
 /* Number of loops per timer tick.
    Initialized by timer_calibrate(). */
 static unsigned loops_per_tick;
@@ -29,6 +32,8 @@ static bool too_many_loops (unsigned loops);
 static void busy_wait (int64_t loops);
 static void real_time_sleep (int64_t num, int32_t denom);
 static void real_time_delay (int64_t num, int32_t denom);
+static bool 
+  comparator (const struct list_elem *a, const struct list_elem *b, void *aux);
 
 /* Sets up the timer to interrupt TIMER_FREQ times per second,
    and registers the corresponding interrupt. */
@@ -37,6 +42,8 @@ timer_init (void)
 {
   pit_configure_channel (0, 2, TIMER_FREQ);
   intr_register_ext (0x20, timer_interrupt, "8254 Timer");
+  /* configure alarms list */
+  list_init(&alarms);     
 }
 
 /* Calibrates loops_per_tick, used to implement brief delays. */
@@ -90,10 +97,31 @@ void
 timer_sleep (int64_t ticks) 
 {
   int64_t start = timer_ticks ();
-
+  enum intr_level old_level;
   ASSERT (intr_get_level () == INTR_ON);
-  while (timer_elapsed (start) < ticks) 
-    thread_yield ();
+
+  /* handle edge cases */
+  if (ticks <= 0){
+    return;
+  }
+
+  /* this is the time (in ticks) when thread is to be waken up */
+  int64_t sleep_time = start + ticks;
+
+  struct alarm alm;
+  alm.time = sleep_time;
+  struct semaphore timer_up;
+  alm.sp = &timer_up;
+  sema_init(&timer_up, 0);
+  
+  /* locking down the alarms list by disabling interrupts to prevent
+     race conditions when inserting an alarm in different threads */
+  old_level = intr_disable();
+  list_insert_ordered(&alarms, &(alm.elem), comparator, NULL);
+  intr_set_level(old_level);
+  
+  /* put thread to sleep */
+  sema_down(&timer_up);
 }
 
 /* Sleeps for approximately MS milliseconds.  Interrupts must be
@@ -165,12 +193,27 @@ timer_print_stats (void)
 {
   printf ("Timer: %"PRId64" ticks\n", timer_ticks ());
 }
-
+
 /* Timer interrupt handler. */
 static void
 timer_interrupt (struct intr_frame *args UNUSED)
 {
   ticks++;
+  // check list of alarms
+  struct list_elem *e;
+  for (e = list_begin (&alarms); e != list_end (&alarms);)
+    {
+      struct alarm *alm = list_entry (e, struct alarm, elem);
+      int64_t time = alm->time;
+      e = list_next (e);
+      // Note: ticks <= wake up time (necessary)
+      if (ticks == time) {
+        sema_up(alm->sp);
+        list_pop_front(&alarms);
+      } else {
+        break;
+      }  
+    }
   thread_tick ();
 }
 
@@ -243,4 +286,12 @@ real_time_delay (int64_t num, int32_t denom)
      the possibility of overflow. */
   ASSERT (denom % 1000 == 0);
   busy_wait (loops_per_tick * num / 1000 * TIMER_FREQ / (denom / 1000)); 
+}
+
+/* comparator for ordered list alarms. */
+static bool 
+comparator (const struct list_elem *a, 
+  const struct list_elem *b, void *aux UNUSED){
+    return (list_entry (a, struct alarm, elem) -> time) 
+            < (list_entry (b, struct alarm, elem) -> time);
 }

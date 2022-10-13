@@ -3,9 +3,19 @@
 
 #include <round.h>
 #include <stdint.h>
+#include "lib/kernel/list.h"
 
 /* Number of timer interrupts per second. */
 #define TIMER_FREQ 100
+
+/* Each alarm is characterised by a time (in ticks) and a semaphore 
+   to make thread sleep (no-busy). The TIME is used as key. */
+struct alarm
+{
+    int64_t time;
+    struct semaphore *sp;
+    struct list_elem elem;
+};
 
 void timer_init (void);
 void timer_calibrate (void);
