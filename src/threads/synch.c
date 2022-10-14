@@ -60,6 +60,8 @@ sema_init (struct semaphore *sema, unsigned value)
 void
 sema_down (struct semaphore *sema) 
 {
+  // printf("Sema down was called by %s\n", thread_current() -> name);
+  
   enum intr_level old_level;
 
   ASSERT (sema != NULL);
@@ -68,7 +70,7 @@ sema_down (struct semaphore *sema)
   old_level = intr_disable ();
   while (sema->value == 0) 
     {
-      list_push_back (&sema->waiters, &thread_current ()->elem);
+      list_insert_ordered (&sema->waiters, &thread_current ()->elem, pri_comparator, NULL);
       thread_block ();
     }
   sema->value--;
@@ -111,12 +113,21 @@ sema_up (struct semaphore *sema)
   enum intr_level old_level;
 
   ASSERT (sema != NULL);
-
+  struct thread *popped = NULL;
   old_level = intr_disable ();
-  if (!list_empty (&sema->waiters)) 
-    thread_unblock (list_entry (list_pop_front (&sema->waiters),
-                                struct thread, elem));
+  if (!list_empty (&sema->waiters)) {
+    popped = list_entry (list_pop_front (&sema->waiters),
+                                struct thread, elem);
+    printf("popped out %s\n", popped->name);
+    thread_unblock (popped);
+  }
+  
   sema->value++;
+
+  /* yield to popped thread if necessary */
+  if (popped != NULL && popped->priority > thread_get_priority()) {
+    thread_yield();
+  } 
   intr_set_level (old_level);
 }
 
@@ -295,7 +306,7 @@ cond_wait (struct condition *cond, struct lock *lock)
   ASSERT (lock_held_by_current_thread (lock));
   
   sema_init (&waiter.semaphore, 0);
-  list_push_back (&cond->waiters, &waiter.elem);
+  list_insert_ordered (&cond->waiters, &waiter.elem, pri_comparator, NULL);
   lock_release (lock);
   sema_down (&waiter.semaphore);
   lock_acquire (lock);

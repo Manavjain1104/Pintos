@@ -4,6 +4,7 @@
 #include <debug.h>
 #include <list.h>
 #include <stdint.h>
+#include <stdbool.h>
 
 /* States in a thread's life cycle. */
 enum thread_status
@@ -138,5 +139,9 @@ int thread_get_nice (void);
 void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
+
+/* exposing comparator function to files that include it */
+bool pri_comparator (const struct list_elem *a, 
+  const struct list_elem *b, void *aux UNUSED);
 
 #endif /* threads/thread.h */
