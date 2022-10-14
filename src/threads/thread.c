@@ -224,6 +224,10 @@ thread_create (const char *name, int priority,
   /* Add to run queue. */
   thread_unblock (t); 
 
+  if (priority > thread_get_priority()) {
+    thread_yield();
+  }
+
   return tid;
 }
 
@@ -533,11 +537,7 @@ init_thread (struct thread *t, const char *name, int priority)
 
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);
-  // DEBUG_PRINT("%s thread was initialised \n", name);
 
-  // if (priority > thread_get_priority()) {
-  //   thread_yield();
-  // }
   intr_set_level (old_level);
 }
 
