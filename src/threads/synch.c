@@ -59,9 +59,7 @@ sema_init (struct semaphore *sema, unsigned value)
    thread will probably turn interrupts back on. */
 void
 sema_down (struct semaphore *sema) 
-{
-  // printf("Sema down was called by %s\n", thread_current() -> name);
-  
+{ 
   enum intr_level old_level;
 
   ASSERT (sema != NULL);
@@ -118,13 +116,12 @@ sema_up (struct semaphore *sema)
   if (!list_empty (&sema->waiters)) {
     popped = list_entry (list_pop_front (&sema->waiters),
                                 struct thread, elem);
-    // printf("popped out %s\n", popped->name);
     thread_unblock (popped);
   }
   
   sema->value++;
 
-  /* yield to popped thread if necessary */
+  /* Yield to popped thread if necessary */
   if (popped != NULL && popped->priority > thread_get_priority()) {
     if (!intr_context()){
       thread_yield();

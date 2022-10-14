@@ -71,8 +71,6 @@ static void schedule (void);
 void thread_schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
 
-
-
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
    general and it is possible in this case only because loader.S
@@ -86,6 +84,7 @@ static tid_t allocate_tid (void);
 
    It is not safe to call thread_current() until this function
    finishes. */
+   
 void
 thread_init (void) 
 {
@@ -100,7 +99,6 @@ thread_init (void)
   init_thread (initial_thread, "main", PRI_DEFAULT);
   initial_thread->status = THREAD_RUNNING;
   initial_thread->tid = allocate_tid ();
-  // DEBUG_PRINT("Thread_init Call complete \n");
 }
 
 /* Starts preemptive thread scheduling by enabling interrupts.
@@ -111,7 +109,6 @@ thread_start (void)
   /* Create the idle thread. */
   struct semaphore idle_started;
   sema_init (&idle_started, 0);
-  // DEBUG_PRINT("creating idle thread inside thread_start \n");
   thread_create ("idle", PRI_MIN, idle, &idle_started);
 
 
@@ -119,9 +116,7 @@ thread_start (void)
   intr_enable ();
 
   /* Wait for the idle thread to initialize idle_thread. */
-  // DEBUG_PRINT("Going inside sema called idle_started \n");
   sema_down (&idle_started);
-  // DEBUG_PRINT("Idle thread put to sleep");
 }
 
 
@@ -242,7 +237,6 @@ thread_block (void)
 {
   ASSERT (!intr_context ());
   ASSERT (intr_get_level () == INTR_OFF);
-  // printf("%s Thread blocked \n", thread_current()->name);
   thread_current ()->status = THREAD_BLOCKED;
   schedule ();
 }
@@ -258,7 +252,6 @@ thread_block (void)
 void
 thread_unblock (struct thread *t) 
 {
-  // DEBUG_PRINT("Thread %s unblocked\n", t->name);
   enum intr_level old_level;
 
   ASSERT (is_thread (t));
@@ -266,7 +259,6 @@ thread_unblock (struct thread *t)
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
 
-  // DEBUG_PRINT("Inserting %s into ready_list \n", t->name);
   list_insert_ordered (&ready_list, &t->elem, pri_comparator, NULL);
 
   t->status = THREAD_READY;
@@ -333,14 +325,6 @@ thread_exit (void)
 void
 thread_yield (void) 
 { 
-  // DEBUG_PRINT("yield got called. Printing ready list \n");
-  // printf("Thread yield %s\n", thread_current ()->name);
-  // struct list_elem *e;
-  // for (e = list_begin (&ready_list); e != list_end (&ready_list);
-  //          e = list_next (e)) {
-  //     // struct thread *tt = list_entry(e, struct thread, elem);
-  //     // DEBUG_PRINT("Ready List %s\n", tt->name);
-  // }
   struct thread *cur = thread_current ();
   enum intr_level old_level;
   
@@ -348,29 +332,11 @@ thread_yield (void)
 
   old_level = intr_disable ();
   if (cur != idle_thread) {
-    /* adding to ready list in priority queue fashion (maximal) */
+    /* Adding to ready list in priority queue fashion (maximal) */
     list_insert_ordered(&ready_list, &(cur->elem), pri_comparator, NULL);
   } 
-
-  // DEBUG_PRINT("Ready List after insertion ");
-  // for (e = list_begin (&ready_list); e != list_end (&ready_list);
-  //          e = list_next (e)) {
-  //     struct thread *tt = list_entry(e, struct thread, elem);
-  //     printf("%s ",tt->name);
-  // }
-  // printf("\n Left cur thread as %s \n", cur->name);
   cur->status = THREAD_READY;
   schedule ();
-  // printf("current thread now is %s \n", thread_current() -> name);
-  // // printf("done with schedule \n");
-  // printf("Final Ready List ");
-  // for (e = list_begin (&ready_list); e != list_end (&ready_list);
-  //          e = list_next (e)) {
-  //     struct thread *tt = list_entry(e, struct thread, elem);
-  //     printf("%s ",tt->name);
-  // }
-  // printf("\n");
-  // printf("Now running thread %s\n", thread_current ()->name);
   intr_set_level (old_level);
 } 
 
@@ -395,11 +361,7 @@ thread_foreach (thread_action_func *func, void *aux)
 void
 thread_set_priority (int new_priority) 
 { 
-  // enum intr_level old_level;
-  // old_level = intr_disable ();
   thread_current ()->priority = new_priority;
-  // intr_set_level (old_level);
-  // DEBUG_PRINT("Set_priority called TID:%s\n", thread_current ()->name);
   if ((list_entry(list_begin(&ready_list), struct thread, elem)) -> priority > 
           new_priority) {
             thread_yield();
@@ -458,10 +420,7 @@ idle (void *idle_started_ UNUSED)
 {
   struct semaphore *idle_started = idle_started_;
   idle_thread = thread_current ();
-  // DEBUG_PRINT("Sema upping inside idle \n");
   sema_up (idle_started);
-
-
 
   for (;;) 
     {
@@ -630,14 +589,12 @@ schedule (void)
   struct thread *prev = NULL;
   ASSERT (intr_get_level () == INTR_OFF);
   ASSERT (cur->status != THREAD_RUNNING);
-  // ASSERT(next != NULL);
   ASSERT (is_thread (next));
 
   if (cur != next) {
     prev = switch_threads (cur, next);
   }
   thread_schedule_tail (prev);
-  // printf("now swtiching to %s\n", cur->name);
 }
 
 /* Returns a tid to use for a new thread. */
@@ -658,7 +615,7 @@ allocate_tid (void)
    Used by switch.S, which can't figure it out on its own. */
 uint32_t thread_stack_ofs = offsetof (struct thread, stack);
 
-/* comparator for ready_list (ordered) */
+/* Comparator for ready_list (ordered) */
 bool 
 pri_comparator (const struct list_elem *a,
             const struct list_elem *b,
