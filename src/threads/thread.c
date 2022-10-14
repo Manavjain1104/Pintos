@@ -242,7 +242,7 @@ thread_block (void)
 {
   ASSERT (!intr_context ());
   ASSERT (intr_get_level () == INTR_OFF);
-  printf("%s Thread blocked \n", thread_current()->name);
+  // printf("%s Thread blocked \n", thread_current()->name);
   thread_current ()->status = THREAD_BLOCKED;
   schedule ();
 }
