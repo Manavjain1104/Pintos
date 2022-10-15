@@ -32,6 +32,10 @@
 #include "threads/interrupt.h"
 #include "threads/thread.h"
 
+/* maximal priority comparator for monitor cases */
+static bool cond_pri_comparator (const struct list_elem *a, 
+  const struct list_elem *b, void *aux UNUSED);
+
 /* Initializes semaphore SEMA to VALUE.  A semaphore is a
    nonnegative integer along with two atomic operators for
    manipulating it:
@@ -264,6 +268,8 @@ struct semaphore_elem
   {
     struct list_elem elem;              /* List element. */
     struct semaphore semaphore;         /* This semaphore. */
+    int highest_priority;               /* This is the priority of the 
+                                           highest priority thread */
   };
 
 /* Initializes condition variable COND.  A condition variable
@@ -306,9 +312,20 @@ cond_wait (struct condition *cond, struct lock *lock)
   ASSERT (lock != NULL);
   ASSERT (!intr_context ());
   ASSERT (lock_held_by_current_thread (lock));
-  
+
+  waiter.highest_priority = thread_get_priority();
   sema_init (&waiter.semaphore, 0);
-  list_insert_ordered (&cond->waiters, &waiter.elem, pri_comparator, NULL);
+  list_insert_ordered (&(cond->waiters), &(waiter.elem), cond_pri_comparator, NULL);
+
+  // struct list_elem *e;
+
+  // for (e = list_begin (&cond->waiters); e != list_end (&cond->waiters);
+  //      e = list_next (e))
+  //   {
+  //     struct list_elem *element = list_begin(&(list_entry(e, struct semaphore_elem, elem) -> semaphore).waiters);
+  //     printf("%s\n", (list_entry(element, struct thread, elem) -> name));
+  //   }
+
   lock_release (lock);
   sema_down (&waiter.semaphore);
   lock_acquire (lock);
@@ -349,3 +366,23 @@ cond_broadcast (struct condition *cond, struct lock *lock)
   while (!list_empty (&cond->waiters))
     cond_signal (cond, lock);
 }
+
+static bool cond_pri_comparator (const struct list_elem *a, 
+  const struct list_elem *b, void *aux UNUSED) {
+    return list_entry(a, struct semaphore_elem, elem) -> highest_priority
+       > list_entry(b, struct semaphore_elem, elem) -> highest_priority;
+    // struct list *waiters = &((sem_elem -> semaphore).waiters);
+    // struct list_elem *elem_a = list_begin(waiters);
+    // int pri_a = list_entry(elem_a, struct thread, elem) -> priority;
+    // struct list_elem *elem_b = list_begin(&((list_entry(b, struct semaphore_elem, elem) -> semaphore).waiters));
+    // int pri_b = list_entry(elem_b, struct thread, elem) -> priority;
+    // bool got = pri_a > pri_b;
+     
+    // bool got = pri_comparator(
+    //   list_begin(&((list_entry(a, struct semaphore_elem, elem) 
+    //                     -> semaphore).waiters)), 
+    //   list_begin(&((list_entry(b, struct semaphore_elem, elem) 
+    //                     -> semaphore).waiters)), 
+    //   NULL);
+    // printf("%d compared %d? --> %d \n", pri_a, pri_b, got);
+  }
