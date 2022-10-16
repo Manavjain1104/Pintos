@@ -219,6 +219,7 @@ thread_create (const char *name, int priority,
   /* Add to run queue. */
   thread_unblock (t); 
 
+  // printf("check for yield comparing %d > %d \n", priority, thread_get_priority());
   if (priority > thread_get_priority()) {
     thread_yield();
   }
@@ -361,7 +362,9 @@ thread_foreach (thread_action_func *func, void *aux)
 void
 thread_set_priority (int new_priority) 
 { 
-  thread_current ()->priority = new_priority;
+  struct thread *cur = thread_current ();
+  cur->base_priority = new_priority;
+  calculate_priority(cur);
   if ((list_entry(list_begin(&ready_list), struct thread, elem)) -> priority > 
           new_priority) {
             thread_yield();
@@ -494,6 +497,10 @@ init_thread (struct thread *t, const char *name, int priority)
   t->priority = priority;
   t->magic = THREAD_MAGIC;
 
+  /* priority donation intialisation */
+  t -> base_priority = priority;
+  list_init(&t->donations);
+
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);
 
@@ -622,4 +629,21 @@ pri_comparator (const struct list_elem *a,
             void *aux UNUSED) {
   return ((list_entry(a, struct thread, elem) -> priority) >
           (list_entry(b, struct thread, elem) -> priority));
+}
+
+/* re-calculates the effective priority for a thread */
+void calculate_priority(struct thread *t) {
+  if (list_empty(&t->donations)) {
+    t->priority = t->base_priority;
+    return;
+  } 
+  struct int_elem* highest_donor = list_entry(
+                list_begin(&t->donations), struct int_elem, elem);
+  t->priority = highest_donor->donated_priority;
+}
+
+/* re-arrange ready_list */
+void re_arrange(struct thread *t) {
+  list_remove(&t->elem);
+  list_insert_ordered(&ready_list, &t->elem, pri_comparator, NULL);
 }

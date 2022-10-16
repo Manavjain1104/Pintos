@@ -213,7 +213,28 @@ lock_acquire (struct lock *lock)
   ASSERT (!intr_context ());
   ASSERT (!lock_held_by_current_thread (lock));
 
-  sema_down (&lock->semaphore);
+  /* attempt sema_try_down to figure out if donation needed */
+  if (!sema_try_down(&lock->semaphore)) {
+    struct thread *holder = lock->holder;
+    int curr_priority = thread_get_priority();
+    if (holder->base_priority < curr_priority) {
+      // current thread needs to become a donor
+      struct int_elem donor_elem;
+      donor_elem.donated_priority = curr_priority;
+      int old_priority = holder->priority;
+      list_insert_ordered(&holder->donations, 
+                    &donor_elem.elem, donor_comparator, NULL);
+      calculate_priority(holder);
+      // rearrange ready_list() -> remove + list_insert_ordered
+      re_arrange(holder);      
+
+      if (holder->priority < old_priority) {
+        thread_yield();
+      }
+    }
+    sema_down (&lock->semaphore);
+    // remove donation
+  } 
   lock->holder = thread_current ();
 }
 
@@ -242,14 +263,60 @@ lock_try_acquire (struct lock *lock)
    An interrupt handler cannot acquire a lock, so it does not
    make sense to try to release a lock within an interrupt
    handler. */
-void
+void  /////// TODO /////////
 lock_release (struct lock *lock) 
 {
   ASSERT (lock != NULL);
   ASSERT (lock_held_by_current_thread (lock));
 
+  /* release donors waiting inside the semaphore */
+  struct thread *cur = thread_current();
+  struct list_elem *e;  
+  struct list *waiting_threads = & (lock->semaphore.waiters);
+  int pri_to_remove[list_size(waiting_threads)];
+  int index = 0;
+  // ASSERT(list_size(waiting_threads));
+  for (e = list_begin (waiting_threads); e != list_end (waiting_threads);
+       e = list_next (e))
+    {
+      // ASSERT(false);
+      struct thread *t = list_entry (e, struct thread, elem);
+      int other_priority = t->priority;
+      if (other_priority > (cur -> base_priority)) {
+        // t is a donor to current thread and must be removed as one
+        // we add to list of priorities of 'int_elems' to remove
+        // ASSERT(false);
+        pri_to_remove[index] = other_priority;
+        index++;
+      } else {
+          break;
+      }
+    }
+  
+  // here we remove the donor elems from the current threads donations
+  int counter = 0;
+  for (e = list_begin (&cur->donations); 
+       e != list_end (& cur->donations) && counter < index;)
+    {
+      struct int_elem *donor = list_entry (e, struct int_elem, elem);
+      if (donor -> donated_priority == pri_to_remove[counter]) {
+        // remove donor elem here
+        struct list_elem *temp = e;
+        e = list_next(e); 
+        list_remove(temp);
+        counter++;
+      } else {
+        e = list_next(e);
+      }
+    }
+  // make sure all donors removed
+  ASSERT(counter == index);
+
+  //re-calculate priority of current thread
+  calculate_priority(cur);
+  
   lock->holder = NULL;
-  sema_up (&lock->semaphore);
+  sema_up (&lock->semaphore);  // Note: sema_up takes care of the yield
 }
 
 /* Returns true if the current thread holds LOCK, false
@@ -361,4 +428,10 @@ static bool cond_pri_comparator (const struct list_elem *a,
   const struct list_elem *b, void *aux UNUSED) {
     return list_entry(a, struct semaphore_elem, elem) -> highest_priority
        > list_entry(b, struct semaphore_elem, elem) -> highest_priority;
+  }
+
+bool donor_comparator (const struct list_elem *a, 
+  const struct list_elem *b, void *aux UNUSED) {
+    return (list_entry(a, struct int_elem, elem) -> donated_priority) 
+            > (list_entry(b, struct int_elem, elem) -> donated_priority);
   }

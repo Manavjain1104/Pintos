@@ -25,6 +25,12 @@ typedef int tid_t;
 #define PRI_DEFAULT 31                  /* Default priority. */
 #define PRI_MAX 63                      /* Highest priority. */
 
+/* int_elem structure for storing priority donations. */
+struct int_elem {
+   int donated_priority;
+   struct list_elem elem;
+};
+
 /* A kernel thread or user process.
 
    Each thread structure is stored in its own 4 kB page.  The
@@ -88,9 +94,10 @@ struct thread
     enum thread_status status;          /* Thread state. */
     char name[16];                      /* Name (for debugging purposes). */
     uint8_t *stack;                     /* Saved stack pointer. */
-    int priority;                       /* Priority. */
+    int priority;                       /* Effective priority. */
     struct list_elem allelem;           /* List element for all threads list. */
-
+    int base_priority;                  /* base priority set during thread creation */
+    struct list donations;              /* list of donations from higher priority threads */
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
 
@@ -139,6 +146,12 @@ int thread_get_nice (void);
 void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
+
+/* re-arrange ready_list to account for priority change */
+void re_arrange(struct thread *t);
+
+/* re-calculates the effective priority for a thread */
+void calculate_priority(struct thread *t);
 
 /* exposing comparator function to files that include it */
 bool pri_comparator (const struct list_elem *a, 
