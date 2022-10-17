@@ -633,16 +633,42 @@ pri_comparator (const struct list_elem *a,
 }
 
 /* re-calculates the effective priority for a thread */
-// TODO; implement nested donation // 
-// METHOD: apni element dhundo, remove karo, then insert_ordered wapas
 void calculate_priority(struct thread *t) {
+  int old_priority = t->priority;
   if (list_empty(&t->donations)) {
     t->priority = t->base_priority;
     return;
   } 
-  struct int_elem* highest_donor = list_entry(
-                list_begin(&t->donations), struct int_elem, elem);
-  t->priority = highest_donor->donated_priority;
+  struct thread_elem* highest_donor = list_entry(
+                list_begin(&t->donations), struct thread_elem, elem);
+  t->priority = (highest_donor->th)->priority;
+
+  if (old_priority == t->priority) {
+    return;
+  }
+
+  // iterate through donees and update the donation value
+  struct list_elem *e; 
+  for (e = list_begin(&t->donees); e != list_end(&t->donees); 
+        e = list_next(e)) {
+          struct thread *donee_thread = list_entry(e, struct thread_elem, elem) -> th;
+          struct list *ds = &donee_thread->donations;
+          struct list_elem *f;
+          for (f = list_begin(ds); 
+               f != list_end(ds); 
+               f = list_next(f))  {
+                  if (list_entry(f, struct thread_elem, elem)->th->tid == t->tid) {
+                    break;
+                  }
+          }
+          // re-order donation according to new priority
+          list_remove(f);
+          list_insert_ordered(ds, f, donor_comparator, NULL);
+          if (list_begin(ds) == f) {
+            // recursively call calculate_priority for nested donation
+            calculate_priority(donee_thread);
+          }
+  }
 }
 
 /* re-arrange ready_list */
