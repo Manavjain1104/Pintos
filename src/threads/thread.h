@@ -90,6 +90,8 @@ struct thread
     uint8_t *stack;                     /* Saved stack pointer. */
     int priority;                       /* Priority. */
     struct list_elem allelem;           /* List element for all threads list. */
+    int niceness;     
+    int recent_cpu_usage;                  /* The niceness of a thread for mlfqs*/
 
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
@@ -139,6 +141,7 @@ int thread_get_nice (void);
 void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
+int thread_load_avg_calc (void);
 
 /* exposing comparator function to files that include it */
 bool pri_comparator (const struct list_elem *a, 

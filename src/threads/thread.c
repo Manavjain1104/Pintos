@@ -11,6 +11,7 @@
 #include "threads/switch.h"
 #include "threads/synch.h"
 #include "threads/vaddr.h"
+#include "fixed-point.c"
 #ifdef USERPROG
 #include "userprog/process.h"
 #endif
@@ -71,6 +72,8 @@ static void schedule (void);
 void thread_schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
 
+static int load_avg;
+
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
    general and it is possible in this case only because loader.S
@@ -99,6 +102,8 @@ thread_init (void)
   init_thread (initial_thread, "main", PRI_DEFAULT);
   initial_thread->status = THREAD_RUNNING;
   initial_thread->tid = allocate_tid ();
+
+  load_avg = 0;
 }
 
 /* Starts preemptive thread scheduling by enabling interrupts.
@@ -222,7 +227,7 @@ thread_create (const char *name, int priority,
   if (priority > thread_get_priority()) {
     thread_yield();
   }
-
+  thread_set_nice(0);
   return tid;
 }
 
@@ -377,33 +382,47 @@ thread_get_priority (void)
 
 /* Sets the current thread's nice value to NICE. */
 void
-thread_set_nice (int nice UNUSED) 
+thread_set_nice (int new_nice UNUSED) 
 {
-  /* Not yet implemented. */
+  thread_current ()->niceness = new_nice;
 }
 
 /* Returns the current thread's nice value. */
 int
 thread_get_nice (void) 
 {
-  /* Not yet implemented. */
-  return 0;
+  return (thread_current()->niceness);
+}
+
+int
+thread_load_avg_calc (void)
+{
+  int ready_threads;
+  
+  if (thread_current () == idle_thread)
+  {
+    ready_threads = list_size (&ready_list);
+  }
+  else
+  {
+    ready_threads = list_size (&ready_list) + 1;
+  }
+  load_avg = multiply_fp_to_fp (convert_int_to_fp (59) / 60, load_avg) + convert_int_to_fp (1) / 60 * ready_threads;
+  return load_avg;
 }
 
 /* Returns 100 times the system load average. */
 int
 thread_get_load_avg (void) 
 {
-  /* Not yet implemented. */
-  return 0;
+  return convert_to_nearest_int(100 * thread_load_avg_calc());
 }
 
 /* Returns 100 times the current thread's recent_cpu value. */
 int
 thread_get_recent_cpu (void) 
 {
-  /* Not yet implemented. */
-  return 0;
+    return thread_current()->recent_cpu_usage = add_int_to_fp (thread_current()->niceness, multiply_fp_to_fp(divide_fp_by_fp((2 * load_avg), add_int_to_fp(1,(2 * load_avg))), thread_current()->recent_cpu_usage));
 }
 
 /* Idle thread.  Executes when no other thread is ready to run.
