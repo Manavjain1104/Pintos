@@ -500,6 +500,7 @@ init_thread (struct thread *t, const char *name, int priority)
   /* priority donation intialisation */
   t -> base_priority = priority;
   list_init(&t->donations);
+  list_init(&t->donees);
 
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);
@@ -632,6 +633,8 @@ pri_comparator (const struct list_elem *a,
 }
 
 /* re-calculates the effective priority for a thread */
+// TODO; implement nested donation // 
+// METHOD: apni element dhundo, remove karo, then insert_ordered wapas
 void calculate_priority(struct thread *t) {
   if (list_empty(&t->donations)) {
     t->priority = t->base_priority;

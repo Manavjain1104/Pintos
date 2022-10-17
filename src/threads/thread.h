@@ -31,6 +31,18 @@ struct int_elem {
    struct list_elem elem;
 };
 
+/* donee_elem structure for storing threads which are donated to */
+struct donee_elem {
+   struct thread* donee;
+   struct list_elem elem;
+};
+
+/* thread_elem structure to store donor and donee threads */
+struct thread_elem {
+   struct thread *th;
+   struct list_elem elem; 
+};
+
 /* A kernel thread or user process.
 
    Each thread structure is stored in its own 4 kB page.  The
@@ -100,6 +112,7 @@ struct thread
     struct list donations;              /* list of donations from higher priority threads */
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
+    struct list donees;         /* list of threads that this thread has donated to */
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */

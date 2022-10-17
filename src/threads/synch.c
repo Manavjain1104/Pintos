@@ -225,6 +225,13 @@ lock_acquire (struct lock *lock)
       list_insert_ordered(&holder->donations, 
                     &donor_elem.elem, donor_comparator, NULL);
       calculate_priority(holder);
+      
+      // recording donee inside the donor threads structure
+      // TODO : refactor as THREAD_ELEM
+      struct donee_elem d_elem; 
+      d_elem.donee = holder;
+      list_push_back(& thread_current()->donees, &d_elem.elem);
+
       // rearrange ready_list() -> remove + list_insert_ordered
       re_arrange(holder);      
 
@@ -263,7 +270,7 @@ lock_try_acquire (struct lock *lock)
    An interrupt handler cannot acquire a lock, so it does not
    make sense to try to release a lock within an interrupt
    handler. */
-void  /////// TODO /////////
+void
 lock_release (struct lock *lock) 
 {
   ASSERT (lock != NULL);
@@ -285,7 +292,6 @@ lock_release (struct lock *lock)
       if (other_priority > (cur -> base_priority)) {
         // t is a donor to current thread and must be removed as one
         // we add to list of priorities of 'int_elems' to remove
-        // ASSERT(false);
         pri_to_remove[index] = other_priority;
         index++;
       } else {
@@ -294,6 +300,7 @@ lock_release (struct lock *lock)
     }
   
   // here we remove the donor elems from the current threads donations
+  // TODO THINK ABOUT DONEE REMOVALS
   int counter = 0;
   for (e = list_begin (&cur->donations); 
        e != list_end (& cur->donations) && counter < index;)
@@ -305,10 +312,15 @@ lock_release (struct lock *lock)
         e = list_next(e); 
         list_remove(temp);
         counter++;
+
+        // TODO : donee -> cur and doner -> donor
+        // doner mein se donee ka reference hatao 
+
       } else {
         e = list_next(e);
       }
     }
+
   // make sure all donors removed
   ASSERT(counter == index);
 
@@ -430,6 +442,7 @@ static bool cond_pri_comparator (const struct list_elem *a,
        > list_entry(b, struct semaphore_elem, elem) -> highest_priority;
   }
 
+// TODO: will break as THREAD_ELEM
 bool donor_comparator (const struct list_elem *a, 
   const struct list_elem *b, void *aux UNUSED) {
     return (list_entry(a, struct int_elem, elem) -> donated_priority) 
