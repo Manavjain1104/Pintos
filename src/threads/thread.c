@@ -16,6 +16,26 @@
 #include "userprog/process.h"
 #endif
 
+/* List of Queues
+if (mlfqs){
+  struct list *pri_list;
+
+  for (int i = 0; i < 64; i++) { 
+    if (thread_get_priority == i){
+      pri_list[i] = (Point *)malloc(sizeof(pri_list));
+      list_init(pri_list[i]);
+      thread_init();
+    }
+  } 
+  //Free
+  for (int i = 0; i < 64; i++) { 
+    if (thread_get_priority == i){
+  	free(pri_list[i]);
+    } 
+  } 
+}
+*/
+
 /* Random value for struct thread's `magic' member.
    Used to detect stack overflow.  See the big comment at the top
    of thread.h for details. */
@@ -148,6 +168,13 @@ thread_tick (void)
 #endif
   else
     kernel_ticks++;
+        /*if(mlfqs){
+      update data in scheduler after x ticks
+      updates before kernel thread has a chance to run
+      for every tick running thread recent_cpu++
+      for every other thread recent_cpu = (2*load_avg)/(2*load_avg + 1) * recent_cpu + nice
+      for every second load_avg = (59/60)*load_avg + (1/60)*ready_threads.
+    }*/
 
   /* Enforce preemption. */
   if (++thread_ticks >= TIME_SLICE)
@@ -344,6 +371,22 @@ thread_yield (void)
   cur->status = THREAD_READY;
   schedule ();
   intr_set_level (old_level);
+
+  struct thread *cur = thread_current ();
+  
+    /*if (mlfqs){
+    -different ready lists for each priority
+    -list_insert_ordered(&ready_list, &(cur->elem), pri_comparator, NULL);
+    - pri_checker (const struct list_elem *a, void *aux UNUSED) {
+        elem_pri = ((list_entry(a, struct thread, elem) -> priority)
+        for(elem_pri<64){
+          list_insert_ordered(&ready_list, &(cur->elem), pri_checker, NULL);
+        }
+      }
+
+
+  }*/
+  
 } 
 
 /* Invoke function 'func' on all threads, passing along 'aux'.
