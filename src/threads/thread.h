@@ -43,6 +43,12 @@ struct thread_elem {
    struct list_elem elem; 
 };
 
+/* lock_elem to store locks that were tried to acquire */
+struct lock_elem {
+   struct lock *l;
+   struct list_elem elem;
+};
+
 /* A kernel thread or user process.
 
    Each thread structure is stored in its own 4 kB page.  The
@@ -110,6 +116,9 @@ struct thread
     struct list_elem allelem;           /* List element for all threads list. */
     int base_priority;                  /* base priority set during thread creation */
     struct list donations;              /* list of donations from higher priority threads */
+    struct list locks_downed;           /* list of locks currently passed in lock_acquire() 
+                                           on for possible future donations */
+   
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
     struct list donees;                 /* list of threads that this thread 

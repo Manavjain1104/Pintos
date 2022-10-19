@@ -360,10 +360,41 @@ thread_foreach (thread_action_func *func, void *aux)
 
 /* Sets the current thread's priority to NEW_PRIORITY. */
 void
+// TODO GO THRU LOCKS IF oR SOMETHEING
 thread_set_priority (int new_priority) 
 { 
   struct thread *cur = thread_current ();
+  int old_base_priority = cur->base_priority;
   cur->base_priority = new_priority;
+
+  // check if priority went down - in which case
+  // another thread waiting inside the semaphore becomes a donor
+  if (old_base_priority > new_priority) {
+    struct list_elem *e;
+    struct list_elem *f;
+    for (e = list_begin (&cur->locks_downed); e != list_end (&cur->locks_downed);
+       e = list_next (e)) {
+         struct list *waiters = &(list_entry(e, struct lock, elem)->semaphore.waiters);
+         for (f = list_begin (waiters); f != list_end (waiters);
+             f = list_next (f)) {
+              struct thread *donor = list_entry(f, struct thread, elem);
+              if (donor->priority > new_priority 
+                  && donor->priority <= old_base_priority) {
+                // a doner donee reference now needs to be established 
+                // curr -> donee and donor -> waiter
+                struct thread_elem donor_elem;
+                struct thread_elem donee_elem;
+                
+                donor_elem.th = donor;
+                list_insert_ordered(&cur->donations, &donor_elem.elem, 
+                  donor_comparator, NULL);
+                donee_elem.th = cur;
+                list_push_back(&donor->donees, &donee_elem.elem);
+              }
+         }
+    }
+  }
+
   calculate_priority(cur);
   if ((list_entry(list_begin(&ready_list), struct thread, elem)) -> priority > 
           new_priority) {
@@ -501,6 +532,7 @@ init_thread (struct thread *t, const char *name, int priority)
   t -> base_priority = priority;
   list_init(&t->donations);
   list_init(&t->donees);
+  list_init(&t->locks_downed);
 
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);

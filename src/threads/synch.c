@@ -194,6 +194,11 @@ lock_init (struct lock *lock)
 {
   ASSERT (lock != NULL);
 
+  /* static member lock_lid_num for giving unique id's to locks */
+  static int lock_lid_num = 0;
+  lock->lid = lock_lid_num;
+  lock_lid_num++;
+
   lock->holder = NULL;
   sema_init (&lock->semaphore, 1);
 }
@@ -240,7 +245,13 @@ lock_acquire (struct lock *lock)
     }
     sema_down (&lock->semaphore);
     // remove donation
-  } 
+  }
+  // now the current thread has acquired the lock, 
+  // for future donations it now needs to store this lock
+  // struct lock_elem lock_e;
+  // lock_e.l = lock;
+  
+  list_push_back(&thread_current()->locks_downed, &lock->elem); 
   lock->holder = thread_current ();
 }
 
@@ -274,60 +285,69 @@ lock_release (struct lock *lock)
 {
   ASSERT (lock != NULL);
   ASSERT (lock_held_by_current_thread (lock));
-
   /* release donors waiting inside the semaphore */
   struct thread *cur = thread_current();
   struct list_elem *e;  
   struct list *waiting_threads = & (lock->semaphore.waiters);
   int pri_to_remove[list_size(waiting_threads)];
   int index = 0;
-  // ASSERT(list_size(waiting_threads));
   for (e = list_begin (waiting_threads); e != list_end (waiting_threads);
        e = list_next (e))
-    {
-      // ASSERT(false);
-      struct thread *t = list_entry (e, struct thread, elem);
-      int other_priority = t->priority;
-      if (other_priority > (cur -> base_priority)) {
-        // t is a donor to current thread and must be removed as one
-        // we add to list of priorities of 'thread_elems' to remove
-        pri_to_remove[index] = other_priority;
-        index++;
-      } else {
-          break;
-      }
+  {
+    struct thread *t = list_entry (e, struct thread, elem);
+    int other_priority = t->priority;
+    if (other_priority > (cur -> base_priority)) {
+      // t is a donor to current thread and must be removed as one
+      // we add to list of priorities of 'thread_elems' to remove
+      pri_to_remove[index] = other_priority;
+      index++;
+    } else {
+        break;
     }
-  
+  }
+
   // here we remove the donor elems from 
   // the current threads donations and vice-versa
   int counter = 0;
   for (e = list_begin (&cur->donations); 
        e != list_end (& cur->donations) && counter < index;)
-    {
-      struct thread_elem *donor = list_entry (e, struct thread_elem, elem);
-      struct list_elem *temp = e;
-      e = list_next(e);
-      if ((donor->th)->priority == pri_to_remove[counter]) {
-        // remove donor reference from donee
-        list_remove(temp);
-        counter++;
-
-        // remove donee reference from donor
-        struct list_elem *f; 
-        for (f = list_begin(&donor->th->donees); f != list_end(&donor->th->donees); 
-              f = list_next(f)) {
-          struct thread_elem *donee = list_entry(f, struct thread_elem, elem);
-          if (donee->th->tid == cur->tid) {
-            list_remove(f);
-            break;
-          }
+  {
+    struct thread_elem *donor = list_entry (e, struct thread_elem, elem);
+    struct list_elem *temp = e;
+    e = list_next(e);
+    if ((donor->th)->priority == pri_to_remove[counter]) {
+      // remove donor reference from donee
+      list_remove(temp);
+      counter++;
+      // remove donee reference from donor
+      struct list_elem *f; 
+      for (f = list_begin(&donor->th->donees); f != list_end(&donor->th->donees); 
+            f = list_next(f)) {
+        struct thread_elem *donee = list_entry(f, struct thread_elem, elem);
+        if (donee->th->tid == cur->tid) {
+          list_remove(f);
+          break;
         }
       }
     }
-
+  }
   // make sure all donors removed
   ASSERT(counter == index);
 
+  // remove the lock as a possible future donor provider
+  struct list_elem *f;
+  for (f = list_begin (&cur->locks_downed); 
+      f != list_end (&cur->locks_downed); f = list_next(f)) {
+        if (list_entry(f, struct lock, elem)->lid == lock->lid) {
+          // printf("\n lid %d \n", list_entry(f, struct lock, elem)->lid);
+          list_remove(f);
+          // if (strcmp(thread_current()->name, "high-priority") == 0) {
+          //   debug_backtrace();
+          // }
+          break;
+        }
+  }
+  
   //re-calculate priority of current thread
   calculate_priority(cur);
   
