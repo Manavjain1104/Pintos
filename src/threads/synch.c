@@ -31,6 +31,7 @@
 #include <string.h>
 #include "threads/interrupt.h"
 #include "threads/thread.h"
+#include "threads/malloc.h"
 
 /* maximal priority comparator for monitor cases */
 static bool cond_pri_comparator (const struct list_elem *a, 
@@ -224,17 +225,17 @@ lock_acquire (struct lock *lock)
     int curr_priority = thread_get_priority();
     if (holder->base_priority < curr_priority) {
       // current thread needs to become a donor
-      struct thread_elem donor_elem;
-      donor_elem.th = thread_current();
+      struct thread_elem *donor_elem = malloc(sizeof(struct thread_elem));
+      donor_elem->th = thread_current();
       int old_priority = holder->priority;
       list_insert_ordered(&holder->donations, 
-                    &donor_elem.elem, donor_comparator, NULL);
+                    &donor_elem->elem, donor_comparator, NULL);
       calculate_priority(holder);
       
       // recording donee inside the donor threads structure
-      struct thread_elem donee_elem; 
-      donee_elem.th = holder;
-      list_push_back(& thread_current()->donees, &donee_elem.elem);
+      struct thread_elem *donee_elem = malloc(sizeof(struct thread_elem)); 
+      donee_elem->th = holder;
+      list_push_back(& thread_current()->donees, &donee_elem->elem);
 
       // rearrange ready_list() -> remove + list_insert_ordered
       re_arrange(holder);      
@@ -244,13 +245,10 @@ lock_acquire (struct lock *lock)
       }
     }
     sema_down (&lock->semaphore);
-    // remove donation
   }
+
   // now the current thread has acquired the lock, 
   // for future donations it now needs to store this lock
-  // struct lock_elem lock_e;
-  // lock_e.l = lock;
-  
   list_push_back(&thread_current()->locks_downed, &lock->elem); 
   lock->holder = thread_current ();
 }
@@ -318,6 +316,7 @@ lock_release (struct lock *lock)
     if ((donor->th)->priority == pri_to_remove[counter]) {
       // remove donor reference from donee
       list_remove(temp);
+      free(list_entry(temp, struct thread_elem, elem));
       counter++;
       // remove donee reference from donor
       struct list_elem *f; 
@@ -326,6 +325,7 @@ lock_release (struct lock *lock)
         struct thread_elem *donee = list_entry(f, struct thread_elem, elem);
         if (donee->th->tid == cur->tid) {
           list_remove(f);
+          free(list_entry(f, struct thread_elem, elem));
           break;
         }
       }
@@ -339,11 +339,7 @@ lock_release (struct lock *lock)
   for (f = list_begin (&cur->locks_downed); 
       f != list_end (&cur->locks_downed); f = list_next(f)) {
         if (list_entry(f, struct lock, elem)->lid == lock->lid) {
-          // printf("\n lid %d \n", list_entry(f, struct lock, elem)->lid);
           list_remove(f);
-          // if (strcmp(thread_current()->name, "high-priority") == 0) {
-          //   debug_backtrace();
-          // }
           break;
         }
   }

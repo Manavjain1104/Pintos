@@ -25,28 +25,10 @@ typedef int tid_t;
 #define PRI_DEFAULT 31                  /* Default priority. */
 #define PRI_MAX 63                      /* Highest priority. */
 
-// /* int_elem structure for storing priority donations. */
-// struct int_elem {
-//    int donated_priority;
-//    struct list_elem elem;
-// };
-
-// /* donee_elem structure for storing threads which are donated to */
-// struct donee_elem {
-//    struct thread* donee;
-//    struct list_elem elem;
-// };
-
 /* thread_elem structure to store donor and donee threads */
 struct thread_elem {
    struct thread *th;
    struct list_elem elem; 
-};
-
-/* lock_elem to store locks that were tried to acquire */
-struct lock_elem {
-   struct lock *l;
-   struct list_elem elem;
 };
 
 /* A kernel thread or user process.

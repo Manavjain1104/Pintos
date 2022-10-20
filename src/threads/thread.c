@@ -8,6 +8,7 @@
 #include "threads/interrupt.h"
 #include "threads/intr-stubs.h"
 #include "threads/palloc.h"
+#include "threads/malloc.h"
 #include "threads/switch.h"
 #include "threads/synch.h"
 #include "threads/vaddr.h"
@@ -382,14 +383,14 @@ thread_set_priority (int new_priority)
                   && donor->priority <= old_base_priority) {
                 // a doner donee reference now needs to be established 
                 // curr -> donee and donor -> waiter
-                struct thread_elem donor_elem;
-                struct thread_elem donee_elem;
+                struct thread_elem *donor_elem = malloc(sizeof(struct thread_elem));
+                struct thread_elem *donee_elem = malloc(sizeof(struct thread_elem));
                 
-                donor_elem.th = donor;
-                list_insert_ordered(&cur->donations, &donor_elem.elem, 
+                donor_elem->th = donor;
+                list_insert_ordered(&cur->donations, &donor_elem->elem, 
                   donor_comparator, NULL);
-                donee_elem.th = cur;
-                list_push_back(&donor->donees, &donee_elem.elem);
+                donee_elem->th = cur;
+                list_push_back(&donor->donees, &donee_elem->elem);
               }
          }
     }
@@ -690,12 +691,12 @@ void calculate_priority(struct thread *t) {
                f != list_end(ds); 
                f = list_next(f))  {
                   if (list_entry(f, struct thread_elem, elem)->th->tid == t->tid) {
+                     // re-order donation according to new priority
+                    list_remove(f);
+                    list_insert_ordered(ds, f, donor_comparator, NULL);
                     break;
                   }
           }
-          // re-order donation according to new priority
-          list_remove(f);
-          list_insert_ordered(ds, f, donor_comparator, NULL);
           if (list_begin(ds) == f) {
             // recursively call calculate_priority for nested donation
             calculate_priority(donee_thread);
