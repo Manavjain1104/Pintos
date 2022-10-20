@@ -1,5 +1,5 @@
-#include <stdint.h>
 #include "fixed-point.h"
+#include <stdint.h>
 
 #define f (2 ^ 14)
 

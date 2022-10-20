@@ -1,3 +1,6 @@
+#ifndef THREADS_FIXED_POINT_H
+#define THREADS_FIXED_POINT_H
+
 #include <stdint.h>
 
 /* Convert an interger n to fixed point */
@@ -48,3 +51,5 @@ divide_fp_by_fp (int32_t x, int32_t y);
 /* Divide fixed point by fixed point */
 int32_t
 divide_fp_by_int (int32_t n, int32_t x);
+
+#endif // threads/fixed-point.h

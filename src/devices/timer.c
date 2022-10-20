@@ -7,7 +7,6 @@
 #include "threads/interrupt.h"
 #include "threads/synch.h"
 #include "threads/thread.h"
-#include "threads/thread.c"
   
 /* See [8254] for hardware details of the 8254 timer chip. */
 
@@ -200,6 +199,22 @@ static void
 timer_interrupt (struct intr_frame *args UNUSED)
 {
   ticks++;
+
+ if (thread_mlfqs)
+  {
+    thread_current ()->recent_cpu_usage = add_int_to_fp(1,thread_current ()->recent_cpu_usage);
+    if (ticks % TIMER_FREQ == 0) 
+      {
+        thread_load_avg_calc ();
+        thread_recent_cpu_calc_all();
+      }
+      //Check every 4th tick
+      if (ticks % 4 == 3)
+      {
+      thread_priority_calc_all ();
+      }
+  }
+
   // check list of alarms
   struct list_elem *e;
   for (e = list_begin (&alarms); e != list_end (&alarms);)
@@ -217,28 +232,8 @@ timer_interrupt (struct intr_frame *args UNUSED)
     }
   thread_tick ();
 
-  if (thread_mlfqs)
-  {
-    thread_current ()->recent_cpu_usage = add_int_to_fp(1,thread_current ()->recent_cpu_usage);
-    if (ticks % TIMER_FREQ == 0) 
-      {
-        thread_load_avg_calc ();
-        struct list_elem *e;
-        struct thread *t;
+ 
   
-        for (e = list_begin (&all_list); e != list_end (&all_list);
-          e = list_next (e))
-        {
-          t = list_entry (e, struct thread, allelem);
-
-        ASSERT (is_thread (t));
-        if (t == idle_thread)
-          return;
-
-        t->recent_cpu_usage = add_int_to_fp (t->niceness, multiply_fp_to_fp(divide_fp_by_fp((2 * load_avg), add_int_to_fp(1,(2 * load_avg))), t->recent_cpu_usage) );
-        }
-      }
-  }
   /* Figue out how to check the alarms in the list, and wake them */ 
 }
 
@@ -320,3 +315,25 @@ comparator (const struct list_elem *a,
     return (list_entry (a, struct alarm, elem) -> time) 
             < (list_entry (b, struct alarm, elem) -> time);
 }
+
+/*
+void
+alarm_check (void)
+{
+  struct list_elem *tmp, *next;
+  struct alarm *alm;
+  
+  temp = list_begin (&alarms);
+
+  for (temp = list_begin (&alarms); temp != list_end (&alarms);
+          temp = list_next (e))
+    { 
+      alm = list_entry (temp, struct alarm, elem);
+      next = list_next (temp);
+      if (alm->time <= timer_ticks ())
+        dismiss_alm (alm);
+      tmp = next;
+    }
+}
+
+*/

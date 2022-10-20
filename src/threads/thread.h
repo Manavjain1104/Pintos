@@ -5,6 +5,7 @@
 #include <list.h>
 #include <stdint.h>
 #include <stdbool.h>
+#include "fixed-point.h"
 
 /* States in a thread's life cycle. */
 enum thread_status
@@ -90,8 +91,8 @@ struct thread
     uint8_t *stack;                     /* Saved stack pointer. */
     int priority;                       /* Priority. */
     struct list_elem allelem;           /* List element for all threads list. */
-    int niceness;     
-    int recent_cpu_usage;                  /* The niceness of a thread for mlfqs*/
+    int niceness;                       /* The niceness of a thread for mlfqs */
+    int recent_cpu_usage;                 
 
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
@@ -136,12 +137,18 @@ void thread_foreach (thread_action_func *, void *);
 
 int thread_get_priority (void);
 void thread_set_priority (int);
+void thread_priority_calc (struct thread *curr);
+void thread_priority_calc_all (void);
 
 int thread_get_nice (void);
 void thread_set_nice (int);
+
 int thread_get_recent_cpu (void);
+void thread_recent_cpu_calc (struct thread *curr);
+void thread_recent_cpu_calc_all (void);
+
 int thread_get_load_avg (void);
-int thread_load_avg_calc (void);
+void thread_load_avg_calc (void);
 
 /* exposing comparator function to files that include it */
 bool pri_comparator (const struct list_elem *a, 
