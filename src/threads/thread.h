@@ -6,6 +6,10 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+#define COMPARATOR(elem_name)\
+((list_entry(a, struct thread, elem_name) -> priority)\
+   > (list_entry(b, struct thread, elem_name) -> priority))
+
 /* States in a thread's life cycle. */
 enum thread_status
   {
@@ -24,12 +28,6 @@ typedef int tid_t;
 #define PRI_MIN 0                       /* Lowest priority. */
 #define PRI_DEFAULT 31                  /* Default priority. */
 #define PRI_MAX 63                      /* Highest priority. */
-
-/* thread_elem structure to store donor and donee threads */
-struct thread_elem {
-   struct thread *th;
-   struct list_elem elem; 
-};
 
 /* A kernel thread or user process.
 
@@ -95,16 +93,21 @@ struct thread
     char name[16];                      /* Name (for debugging purposes). */
     uint8_t *stack;                     /* Saved stack pointer. */
     int priority;                       /* Effective priority. */
-    struct list_elem allelem;           /* List element for all threads list. */
-    int base_priority;                  /* base priority set during thread creation */
-    struct list donations;              /* list of donations from higher priority threads */
-    struct list locks_downed;           /* list of locks currently passed in lock_acquire() 
-                                           on for possible future donations */
+    struct list_elem allelem;           /* List element for all threads list */
+    int base_priority;                  /* base priority set during thread
+                                           creation */
+    struct list donations;              /* list of donations from higher
+                                           priority threads */
+    struct thread *donee;               /* pointer to thread that this thread
+                                           has donated to */
+    struct list_elem don_elem;          /* list_elem to allow thread to be
+                                           part of donee's donations list */
+    struct list locks_downed;           /* list of locks currently passed in
+                                           lock_acquire() on for possible future
+                                           donations */
    
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
-    struct list donees;                 /* list of threads that this thread 
-                                          fhas donated to */
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */

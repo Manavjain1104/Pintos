@@ -31,7 +31,6 @@
 #include <string.h>
 #include "threads/interrupt.h"
 #include "threads/thread.h"
-#include "threads/malloc.h"
 
 /* maximal priority comparator for monitor cases */
 static bool cond_pri_comparator (const struct list_elem *a, 
@@ -221,21 +220,18 @@ lock_acquire (struct lock *lock)
 
   /* attempt sema_try_down to figure out if donation needed */
   if (!sema_try_down(&lock->semaphore)) {
+    struct thread* cur = thread_current();
     struct thread *holder = lock->holder;
     int curr_priority = thread_get_priority();
     if (holder->base_priority < curr_priority) {
       // current thread needs to become a donor
-      struct thread_elem *donor_elem = malloc(sizeof(struct thread_elem));
-      donor_elem->th = thread_current();
       int old_priority = holder->priority;
       list_insert_ordered(&holder->donations, 
-                    &donor_elem->elem, donor_comparator, NULL);
+                    &cur->don_elem, donor_comparator, NULL);
       calculate_priority(holder);
       
       // recording donee inside the donor threads structure
-      struct thread_elem *donee_elem = malloc(sizeof(struct thread_elem)); 
-      donee_elem->th = holder;
-      list_push_back(& thread_current()->donees, &donee_elem->elem);
+      cur->donee = holder;
 
       // rearrange ready_list() -> remove + list_insert_ordered
       re_arrange(holder);      
@@ -296,7 +292,7 @@ lock_release (struct lock *lock)
     int other_priority = t->priority;
     if (other_priority > (cur -> base_priority)) {
       // t is a donor to current thread and must be removed as one
-      // we add to list of priorities of 'thread_elems' to remove
+      // we add to list of priorities of threads to remove
       pri_to_remove[index] = other_priority;
       index++;
     } else {
@@ -310,25 +306,15 @@ lock_release (struct lock *lock)
   for (e = list_begin (&cur->donations); 
        e != list_end (& cur->donations) && counter < index;)
   {
-    struct thread_elem *donor = list_entry (e, struct thread_elem, elem);
+    struct thread *donor = list_entry (e, struct thread, don_elem);
     struct list_elem *temp = e;
     e = list_next(e);
-    if ((donor->th)->priority == pri_to_remove[counter]) {
+    if (donor->priority == pri_to_remove[counter]) {
       // remove donor reference from donee
       list_remove(temp);
-      free(list_entry(temp, struct thread_elem, elem));
       counter++;
       // remove donee reference from donor
-      struct list_elem *f; 
-      for (f = list_begin(&donor->th->donees); f != list_end(&donor->th->donees); 
-            f = list_next(f)) {
-        struct thread_elem *donee = list_entry(f, struct thread_elem, elem);
-        if (donee->th->tid == cur->tid) {
-          list_remove(f);
-          free(list_entry(f, struct thread_elem, elem));
-          break;
-        }
-      }
+      donor->donee = NULL;
     }
   }
   // make sure all donors removed
@@ -464,6 +450,5 @@ static bool cond_pri_comparator (const struct list_elem *a,
 
 bool donor_comparator (const struct list_elem *a, 
   const struct list_elem *b, void *aux UNUSED) {
-    return (list_entry(a, struct thread_elem, elem) -> th -> priority) 
-            > (list_entry(b, struct thread_elem, elem) -> th -> priority);
+    return COMPARATOR(don_elem);
   }

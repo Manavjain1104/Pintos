@@ -8,7 +8,6 @@
 #include "threads/interrupt.h"
 #include "threads/intr-stubs.h"
 #include "threads/palloc.h"
-#include "threads/malloc.h"
 #include "threads/switch.h"
 #include "threads/synch.h"
 #include "threads/vaddr.h"
@@ -220,7 +219,6 @@ thread_create (const char *name, int priority,
   /* Add to run queue. */
   thread_unblock (t); 
 
-  // printf("check for yield comparing %d > %d \n", priority, thread_get_priority());
   if (priority > thread_get_priority()) {
     thread_yield();
   }
@@ -361,7 +359,6 @@ thread_foreach (thread_action_func *func, void *aux)
 
 /* Sets the current thread's priority to NEW_PRIORITY. */
 void
-// TODO GO THRU LOCKS IF oR SOMETHEING
 thread_set_priority (int new_priority) 
 { 
   struct thread *cur = thread_current ();
@@ -373,9 +370,10 @@ thread_set_priority (int new_priority)
   if (old_base_priority > new_priority) {
     struct list_elem *e;
     struct list_elem *f;
-    for (e = list_begin (&cur->locks_downed); e != list_end (&cur->locks_downed);
-       e = list_next (e)) {
-         struct list *waiters = &(list_entry(e, struct lock, elem)->semaphore.waiters);
+    for (e = list_begin (&cur->locks_downed);
+         e != list_end (&cur->locks_downed); e = list_next (e)) {
+         struct list *waiters = &(list_entry(e, struct lock, elem)
+                                   ->semaphore.waiters);
          for (f = list_begin (waiters); f != list_end (waiters);
              f = list_next (f)) {
               struct thread *donor = list_entry(f, struct thread, elem);
@@ -383,14 +381,9 @@ thread_set_priority (int new_priority)
                   && donor->priority <= old_base_priority) {
                 // a doner donee reference now needs to be established 
                 // curr -> donee and donor -> waiter
-                struct thread_elem *donor_elem = malloc(sizeof(struct thread_elem));
-                struct thread_elem *donee_elem = malloc(sizeof(struct thread_elem));
-                
-                donor_elem->th = donor;
-                list_insert_ordered(&cur->donations, &donor_elem->elem, 
+                list_insert_ordered(&cur->donations, &donor->don_elem, 
                   donor_comparator, NULL);
-                donee_elem->th = cur;
-                list_push_back(&donor->donees, &donee_elem->elem);
+                donor->donee = thread_current();
               }
          }
     }
@@ -532,7 +525,7 @@ init_thread (struct thread *t, const char *name, int priority)
   /* priority donation intialisation */
   t -> base_priority = priority;
   list_init(&t->donations);
-  list_init(&t->donees);
+  t->donee = NULL;
   list_init(&t->locks_downed);
 
   old_level = intr_disable ();
@@ -661,8 +654,7 @@ bool
 pri_comparator (const struct list_elem *a,
             const struct list_elem *b,
             void *aux UNUSED) {
-  return ((list_entry(a, struct thread, elem) -> priority) >
-          (list_entry(b, struct thread, elem) -> priority));
+  return COMPARATOR(elem);
 }
 
 /* re-calculates the effective priority for a thread */
@@ -672,35 +664,32 @@ void calculate_priority(struct thread *t) {
     t->priority = t->base_priority;
     return;
   } 
-  struct thread_elem* highest_donor = list_entry(
-                list_begin(&t->donations), struct thread_elem, elem);
-  t->priority = (highest_donor->th)->priority;
+  struct thread* highest_donor = list_entry(
+                list_begin(&t->donations), struct thread, don_elem);
+  t->priority = highest_donor->priority;
 
   if (old_priority == t->priority) {
     return;
   }
 
-  // iterate through donees and update the donation value
-  struct list_elem *e; 
-  for (e = list_begin(&t->donees); e != list_end(&t->donees); 
-        e = list_next(e)) {
-          struct thread *donee_thread = list_entry(e, struct thread_elem, elem) -> th;
-          struct list *ds = &donee_thread->donations;
-          struct list_elem *f;
-          for (f = list_begin(ds); 
-               f != list_end(ds); 
-               f = list_next(f))  {
-                  if (list_entry(f, struct thread_elem, elem)->th->tid == t->tid) {
-                     // re-order donation according to new priority
-                    list_remove(f);
-                    list_insert_ordered(ds, f, donor_comparator, NULL);
-                    break;
-                  }
-          }
-          if (list_begin(ds) == f) {
-            // recursively call calculate_priority for nested donation
-            calculate_priority(donee_thread);
-          }
+  // go to the donnee and update the donation value
+  struct thread *donee_thread = t->donee;
+  if (donee_thread == NULL) {
+    return;
+  }
+  struct list *ds = &donee_thread->donations;
+  struct list_elem *f;
+  for (f = list_begin(ds); f != list_end(ds); f = list_next(f)) {
+    if (list_entry(f, struct thread, don_elem)->tid == t->tid) {
+      // re-order donation according to new priority
+      list_remove(f);
+      list_insert_ordered(ds, f, donor_comparator, NULL);
+      break;
+    }
+  }
+  if (list_begin(ds) == f) {
+    // recursively call calculate_priority for nested donation
+    calculate_priority(donee_thread);
   }
 }
 
