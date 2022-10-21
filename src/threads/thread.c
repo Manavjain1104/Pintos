@@ -366,7 +366,7 @@ thread_set_priority (int new_priority)
   cur->base_priority = new_priority;
 
   // check if priority went down - in which case
-  // another thread waiting inside the semaphore becomes a donor
+  // another thread waiting inside the semaphore may become a donor
   if (old_base_priority > new_priority) {
     struct list_elem *e;
     struct list_elem *f;
@@ -659,6 +659,9 @@ pri_comparator (const struct list_elem *a,
 
 /* re-calculates the effective priority for a thread */
 void calculate_priority(struct thread *t) {
+  // enum intr_level old_level;
+  // old_level = intr_disable();
+
   int old_priority = t->priority;
   if (list_empty(&t->donations)) {
     t->priority = t->base_priority;
@@ -666,7 +669,11 @@ void calculate_priority(struct thread *t) {
   } 
   struct thread* highest_donor = list_entry(
                 list_begin(&t->donations), struct thread, don_elem);
-  t->priority = highest_donor->priority;
+  if (highest_donor->priority > t->base_priority) {
+    t->priority = highest_donor->priority;
+  }
+  
+  // intr_set_level(old_level);
 
   if (old_priority == t->priority) {
     return;
@@ -687,10 +694,11 @@ void calculate_priority(struct thread *t) {
       break;
     }
   }
-  if (list_begin(ds) == f) {
-    // recursively call calculate_priority for nested donation
-    calculate_priority(donee_thread);
-  }
+
+  // recursively call calculate_priority for nested donation
+  // synchronisation problems are not a problem as 
+  // end result is same in all cases.
+  calculate_priority(donee_thread);
 }
 
 /* re-arrange ready_list */
