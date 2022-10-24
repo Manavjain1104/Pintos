@@ -381,9 +381,13 @@ thread_set_priority (int new_priority)
                   && donor->priority <= old_base_priority) {
                 // a doner donee reference now needs to be established 
                 // curr -> donee and donor -> waiter
+                // Note: interrupts are disables to avoid synchronisation issues
+                enum intr_level old_level;
+                old_level = intr_disable ();
                 list_insert_ordered(&cur->donations, &donor->don_elem, 
                   donor_comparator, NULL);
                 donor->donee = thread_current();
+                intr_set_level (old_level);
               }
          }
     }
@@ -659,21 +663,22 @@ pri_comparator (const struct list_elem *a,
 
 /* re-calculates the effective priority for a thread */
 void calculate_priority(struct thread *t) {
-  // enum intr_level old_level;
-  // old_level = intr_disable();
-
   int old_priority = t->priority;
+
+  enum intr_level old_level;   // Note: interrupts disabled to avoid
+  old_level = intr_disable();  // synchronisation issues
   if (list_empty(&t->donations)) {
     t->priority = t->base_priority;
+    intr_set_level(old_level);
     return;
   } 
   struct thread* highest_donor = list_entry(
                 list_begin(&t->donations), struct thread, don_elem);
+  intr_set_level(old_level);
+
   if (highest_donor->priority > t->base_priority) {
     t->priority = highest_donor->priority;
   }
-  
-  // intr_set_level(old_level);
 
   if (old_priority == t->priority) {
     return;
@@ -684,6 +689,8 @@ void calculate_priority(struct thread *t) {
   if (donee_thread == NULL) {
     return;
   }
+  // Note: interrupts disabled to avoid synchronisation issues
+  old_level = intr_disable();  
   struct list *ds = &donee_thread->donations;
   struct list_elem *f;
   for (f = list_begin(ds); f != list_end(ds); f = list_next(f)) {
@@ -694,6 +701,7 @@ void calculate_priority(struct thread *t) {
       break;
     }
   }
+  intr_set_level(old_level);
 
   // recursively call calculate_priority for nested donation
   // synchronisation problems are not a problem as 

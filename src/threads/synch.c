@@ -225,9 +225,11 @@ lock_acquire (struct lock *lock)
     int curr_priority = thread_get_priority();
     if (holder->base_priority < curr_priority) {
       // current thread needs to become a donor
-      int old_priority = holder->priority;
+      enum intr_level old_level;   // Note: interrupts disabled to avoid
+      old_level = intr_disable();  // synchronisation issues
       list_insert_ordered(&holder->donations, 
                     &cur->don_elem, donor_comparator, NULL);
+      intr_set_level(old_level);
       calculate_priority(holder);
       
       // recording donee inside the donor threads structure
@@ -235,10 +237,6 @@ lock_acquire (struct lock *lock)
 
       // rearrange ready_list() -> remove + list_insert_ordered
       re_arrange(holder);      
-
-      if (holder->priority < old_priority) {
-        thread_yield();
-      }
     }
     sema_down (&lock->semaphore);
   }
@@ -303,6 +301,8 @@ lock_release (struct lock *lock)
   // here we remove the donor elems from 
   // the current threads donations and vice-versa
   int counter = 0;
+  enum intr_level old_level;   // Note: interrupts disabled to avoid
+  old_level = intr_disable();  // synchronisation issues
   for (e = list_begin (&cur->donations); 
        e != list_end (& cur->donations) && counter < index;)
   {
@@ -317,6 +317,8 @@ lock_release (struct lock *lock)
       donor->donee = NULL;
     }
   }
+  intr_set_level(old_level);
+
   // make sure all donors removed
   ASSERT(counter == index);
 
