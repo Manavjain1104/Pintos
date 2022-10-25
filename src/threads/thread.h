@@ -6,6 +6,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include "fixed-point.h"
+#include "devices/timer.h"
 
 /* States in a thread's life cycle. */
 enum thread_status
@@ -92,7 +93,8 @@ struct thread
     int priority;                       /* Priority. */
     struct list_elem allelem;           /* List element for all threads list. */
     int niceness;                       /* The niceness of a thread for mlfqs */
-    int recent_cpu_usage;                 
+    int32_t recent_cpu_usage;           /* most recent CPU usage 
+                                           of the current thread */  
 
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */

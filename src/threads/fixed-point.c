@@ -1,7 +1,7 @@
 #include "fixed-point.h"
 #include <stdint.h>
 
-#define f (2 ^ 14)
+int32_t f = (1<<14);
 
 /* Convert an interger n to fixed point */
 int32_t

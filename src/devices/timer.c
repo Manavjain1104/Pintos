@@ -199,26 +199,9 @@ static void
 timer_interrupt (struct intr_frame *args UNUSED)
 {
   ticks++;
-
- if (thread_mlfqs)
-  {
-    thread_current ()->recent_cpu_usage = add_int_to_fp(1,thread_current ()->recent_cpu_usage);
-    if (ticks % TIMER_FREQ == 0) 
-      {
-        thread_load_avg_calc ();
-        thread_recent_cpu_calc_all();
-      }
-      //Check every 4th tick
-      if (ticks % 4 == 3)
-      {
-      thread_priority_calc_all ();
-      }
-  }
-
   // check list of alarms
   struct list_elem *e;
-  for (e = list_begin (&alarms); e != list_end (&alarms);)
-    {
+  for (e = list_begin (&alarms); e != list_end (&alarms);) {
       struct alarm *alm = list_entry (e, struct alarm, elem);
       int64_t time = alm->time;
       e = list_next (e);
@@ -229,12 +212,8 @@ timer_interrupt (struct intr_frame *args UNUSED)
       } else {
         break;
       }  
-    }
-  thread_tick ();
-
- 
-  
-  /* Figue out how to check the alarms in the list, and wake them */ 
+  }
+  thread_tick (); 
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer

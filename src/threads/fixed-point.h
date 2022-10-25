@@ -2,6 +2,10 @@
 #define THREADS_FIXED_POINT_H
 
 #include <stdint.h>
+#define ft 1<<(14)
+
+#define mul_fp_fp(x, y) ((int64_t)(x)) * (y) / (ft)
+#define div_fp_fp(x, y) ((int64_t)(x)) * (ft) / (y)
 
 /* Convert an interger n to fixed point */
 int32_t
