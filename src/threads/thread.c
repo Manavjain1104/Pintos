@@ -150,20 +150,28 @@ thread_tick (void) {
 
   if (thread_mlfqs) {
     // increment recent CPU usage when not in idle thread
+    // printf("current thread : %s \n", thread_current()->name);
+    // printf("ready list %d\n", list_size(&ready_list));
+    // printf("ticking\n");
     if (thread_current() != idle_thread) {
       thread_current ()->recent_cpu_usage = 
         add_int_to_fp(1, thread_current ()->recent_cpu_usage);
+      // printf("went inside %lld\n", timer_ticks());
     }
     int ticks = timer_ticks();
+    // printf("recent cpu: %d %d\n", thread_current()->recent_cpu_usage, ticks);
     if ((ticks % TIMER_FREQ) == 0) {
-        // printf("went inside on %d ticks\n", ticks);
+        // printf("timer freq went inside %d ticks\n", ticks);
         thread_load_avg_calc ();
         thread_recent_cpu_calc_all();
     }
-    //Check every 4th tick
+    // printf("checking slice\n");
+    // Check every 4th tick
     if ((ticks % TIME_SLICE) == 0) {
       thread_priority_calc_all ();    // TODO : call '(if NECESSARY)'
+      intr_yield_on_return();
     }
+    // printf("done with thread tick\n");
   }
 
   /* Enforce preemption. */
@@ -428,20 +436,31 @@ thread_priority_calc_all (void) {
       t = list_entry (e, struct thread, allelem);
       thread_priority_calc (t);
     }
-    
+  
+  // printf("sorting\n");
+  
+  enum intr_level old_level; 
+  old_level = intr_disable();
   if (list_empty (&ready_list))
     return;
-
-  list_sort (&ready_list, pri_comparator, NULL);
+  // printf("size of ready list : %d \n", list_size(&ready_list));
+  // list_sort (&ready_list, pri_comparator, NULL);
+  // printf("done with CALC ALL");
+  intr_set_level(old_level);
+  // printf("done with CALC ALL");
 }
 
 /* Sets the current thread's nice value to NICE. */
 void
 thread_set_nice (int new_nice) {
   thread_current ()->niceness = new_nice;
-  int old_priority = thread_get_priority();
+  // int old_priority = thread_get_priority();
   thread_recent_cpu_calc (thread_current());
   thread_priority_calc (thread_current());
+
+  if (thread_get_priority() < (list_entry(list_begin(&ready_list), struct thread, elem) -> priority)) {
+    thread_yield();
+  }
 }
 
 /* Returns the current thread's nice value. */
@@ -588,19 +607,19 @@ init_thread (struct thread *t, const char *name, int priority)
   strlcpy (t->name, name, sizeof t->name);
   t->stack = (uint8_t *) t + PGSIZE;
 
+  t->magic = THREAD_MAGIC;
+
   if (thread_mlfqs) {
-    t->niceness = 0; /* NICE_DEFAULT should be zero */
     if (t != initial_thread)
       t->recent_cpu_usage = thread_get_recent_cpu ();
     else
       t->recent_cpu_usage = 0;
+    t -> niceness = 0;
+    thread_priority_calc(t);
+  } else {
+    t -> priority = priority;
   }
-  t->priority = priority;
-  t->magic = THREAD_MAGIC;
 
-  if (thread_mlfqs) {
-    thread_priority_calc(t);   // TODO : check if this broke code
-  } 
   old_level = intr_disable ();
 
   list_push_back (&all_list, &t->allelem);
