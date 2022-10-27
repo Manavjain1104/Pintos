@@ -72,7 +72,7 @@ sema_down (struct semaphore *sema)
   old_level = intr_disable ();
   while (sema->value == 0) 
     {
-      list_insert_ordered (&sema->waiters, &thread_current ()->elem, pri_comparator, NULL);
+      list_push_back (&sema->waiters, &thread_current ()->elem);
       thread_block ();
     }
   sema->value--;
@@ -118,8 +118,9 @@ sema_up (struct semaphore *sema)
   struct thread *popped = NULL;
   old_level = intr_disable ();
   if (!list_empty (&sema->waiters)) {
-    popped = list_entry (list_pop_front (&sema->waiters),
-                                struct thread, elem);
+    struct list_elem *max_elem = list_max (&sema->waiters, pri_comparator, NULL);
+    popped = list_entry (max_elem, struct thread, elem);
+    list_remove(max_elem);
     thread_unblock (popped);
   }
   
@@ -277,63 +278,56 @@ lock_release (struct lock *lock)
 {
   ASSERT (lock != NULL);
   ASSERT (lock_held_by_current_thread (lock));
-  /* release donors waiting inside the semaphore */
-  struct thread *cur = thread_current();
-  struct list_elem *e;  
-  struct list *waiting_threads = & (lock->semaphore.waiters);
-  int pri_to_remove[list_size(waiting_threads)];
-  int index = 0;
-  for (e = list_begin (waiting_threads); e != list_end (waiting_threads);
-       e = list_next (e))
-  {
-    struct thread *t = list_entry (e, struct thread, elem);
-    int other_priority = t->priority;
-    if (other_priority > (cur -> base_priority)) {
-      // t is a donor to current thread and must be removed as one
-      // we add to list of priorities of threads to remove
-      pri_to_remove[index] = other_priority;
-      index++;
-    } else {
-        break;
-    }
-  }
 
-  // here we remove the donor elems from 
-  // the current threads donations and vice-versa
-  int counter = 0;
-  enum intr_level old_level;   // Note: interrupts disabled to avoid
-  old_level = intr_disable();  // synchronisation issues
-  for (e = list_begin (&cur->donations); 
-       e != list_end (& cur->donations) && counter < index;)
-  {
-    struct thread *donor = list_entry (e, struct thread, don_elem);
-    struct list_elem *temp = e;
-    e = list_next(e);
-    if (donor->priority == pri_to_remove[counter]) {
+  if (!thread_mlfqs) {
+    /* release donors waiting inside the semaphore */
+    struct thread *cur = thread_current();
+    struct list_elem *e;  
+    struct list *waiting_threads = & (lock->semaphore.waiters);
+    struct list_elem *elem_to_remove[list_size(waiting_threads)];
+    int index = 0;
+    for (e = list_begin (waiting_threads); e != list_end (waiting_threads);
+        e = list_next (e))
+    {
+      struct thread *t = list_entry (e, struct thread, elem);
+      int other_priority = t->priority;
+      if (other_priority > (cur -> base_priority)) {
+        // t is a donor to current thread and must be removed as one
+        // we add to list of priorities of threads to remove
+        elem_to_remove[index] = &t->don_elem;
+        index++;
+      }
+    }
+
+    // here we remove the donor elems from 
+    // the current threads donations and vice-versa
+
+    enum intr_level old_level;   // Note: interrupts disabled to avoid
+    old_level = intr_disable();  // synchronisation issues
+    for (int i = 0; i < index; i++) {
+      struct list_elem *e = elem_to_remove[i];
+      struct thread *donor = list_entry (e, struct thread, don_elem);
       // remove donor reference from donee
-      list_remove(temp);
-      counter++;
+      list_remove(e);
       // remove donee reference from donor
       donor->donee = NULL;
     }
-  }
-  intr_set_level(old_level);
 
-  // make sure all donors removed
-  ASSERT(counter == index);
+    intr_set_level(old_level);
 
-  // remove the lock as a possible future donor provider
-  struct list_elem *f;
-  for (f = list_begin (&cur->locks_downed); 
-      f != list_end (&cur->locks_downed); f = list_next(f)) {
-        if (list_entry(f, struct lock, elem)->lid == lock->lid) {
-          list_remove(f);
-          break;
-        }
+    // remove the lock as a possible future donor provider
+    struct list_elem *f;
+    for (f = list_begin (&cur->locks_downed); 
+        f != list_end (&cur->locks_downed); f = list_next(f)) {
+          if (list_entry(f, struct lock, elem)->lid == lock->lid) {
+            list_remove(f);
+            break;
+          }
+    }
+    
+    //re-calculate priority of current thread
+    calculate_priority(cur);
   }
-  
-  //re-calculate priority of current thread
-  calculate_priority(cur);
   
   lock->holder = NULL;
   sema_up (&lock->semaphore);  // Note: sema_up takes care of the yield
@@ -402,7 +396,7 @@ cond_wait (struct condition *cond, struct lock *lock)
 
   waiter.highest_priority = thread_get_priority();
   sema_init (&waiter.semaphore, 0);
-  list_insert_ordered (&(cond->waiters), &(waiter.elem), cond_pri_comparator, NULL);
+  list_push_back (&(cond->waiters), &(waiter.elem));
   lock_release (lock);
   sema_down (&waiter.semaphore);
   lock_acquire (lock);
@@ -423,9 +417,11 @@ cond_signal (struct condition *cond, struct lock *lock UNUSED)
   ASSERT (!intr_context ());
   ASSERT (lock_held_by_current_thread (lock));
 
-  if (!list_empty (&cond->waiters)) 
-    sema_up (&list_entry (list_pop_front (&cond->waiters),
-                          struct semaphore_elem, elem)->semaphore);
+  if (!list_empty (&cond->waiters)) {
+    struct list_elem *max_elem = list_max (&cond->waiters, cond_pri_comparator, NULL);
+    list_remove(max_elem);
+    sema_up (&list_entry (max_elem, struct semaphore_elem, elem)->semaphore);
+  }
 }
 
 /* Wakes up all threads, if any, waiting on COND (protected by
@@ -447,10 +443,10 @@ cond_broadcast (struct condition *cond, struct lock *lock)
 static bool cond_pri_comparator (const struct list_elem *a, 
   const struct list_elem *b, void *aux UNUSED) {
     return list_entry(a, struct semaphore_elem, elem) -> highest_priority
-       > list_entry(b, struct semaphore_elem, elem) -> highest_priority;
-  }
+       < list_entry(b, struct semaphore_elem, elem) -> highest_priority;
+}
 
 bool donor_comparator (const struct list_elem *a, 
   const struct list_elem *b, void *aux UNUSED) {
     return COMPARATOR(don_elem);
-  }
+}

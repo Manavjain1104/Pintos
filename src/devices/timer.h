@@ -7,6 +7,7 @@
 
 /* Number of timer interrupts per second. */
 #define TIMER_FREQ 100
+#define TIME_SLICE 4   // in ticks
 
 /* Each alarm is characterised by a time (in ticks) and a semaphore 
    to make thread sleep (no-busy). The TIME is used as key. */
@@ -35,5 +36,7 @@ void timer_udelay (int64_t microseconds);
 void timer_ndelay (int64_t nanoseconds);
 
 void timer_print_stats (void);
-
+/*
+void alarm_check (void);
+*/
 #endif /* devices/timer.h */

@@ -5,6 +5,8 @@
 #include <list.h>
 #include <stdint.h>
 #include <stdbool.h>
+#include "fixed-point.h"
+#include "devices/timer.h"
 
 #define COMPARATOR(elem_name)\
 ((list_entry(a, struct thread, elem_name) -> priority)\
@@ -106,6 +108,9 @@ struct thread
                                            lock_acquire() on for possible future
                                            donations */
    
+    int niceness;                       /* The niceness of a thread for mlfqs */
+    int32_t recent_cpu_usage;           /* most recent CPU usage 
+                                           of the current thread */  
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
 
@@ -149,11 +154,18 @@ void thread_foreach (thread_action_func *, void *);
 
 int thread_get_priority (void);
 void thread_set_priority (int);
+void thread_priority_calc (struct thread *curr);
+void thread_priority_calc_all (void);
 
 int thread_get_nice (void);
 void thread_set_nice (int);
+
 int thread_get_recent_cpu (void);
+void thread_recent_cpu_calc (struct thread *curr);
+void thread_recent_cpu_calc_all (void);
+
 int thread_get_load_avg (void);
+void thread_load_avg_calc (void);
 
 /* re-arrange ready_list to account for priority change */
 void re_arrange(struct thread *t);

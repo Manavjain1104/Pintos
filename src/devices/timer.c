@@ -193,7 +193,7 @@ timer_print_stats (void)
 {
   printf ("Timer: %"PRId64" ticks\n", timer_ticks ());
 }
-
+
 /* Timer interrupt handler. */
 static void
 timer_interrupt (struct intr_frame *args UNUSED)
@@ -201,8 +201,7 @@ timer_interrupt (struct intr_frame *args UNUSED)
   ticks++;
   // check list of alarms
   struct list_elem *e;
-  for (e = list_begin (&alarms); e != list_end (&alarms);)
-    {
+  for (e = list_begin (&alarms); e != list_end (&alarms);) {
       struct alarm *alm = list_entry (e, struct alarm, elem);
       int64_t time = alm->time;
       e = list_next (e);
@@ -213,8 +212,8 @@ timer_interrupt (struct intr_frame *args UNUSED)
       } else {
         break;
       }  
-    }
-  thread_tick ();
+  }
+  thread_tick (); 
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer
