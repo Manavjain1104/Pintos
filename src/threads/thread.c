@@ -150,28 +150,20 @@ thread_tick (void) {
 
   if (thread_mlfqs) {
     // increment recent CPU usage when not in idle thread
-    // printf("current thread : %s \n", thread_current()->name);
-    // printf("ready list %d\n", list_size(&ready_list));
-    // printf("ticking\n");
     if (thread_current() != idle_thread) {
       thread_current ()->recent_cpu_usage = 
         add_int_to_fp(1, thread_current ()->recent_cpu_usage);
-      // printf("went inside %lld\n", timer_ticks());
     }
     int ticks = timer_ticks();
-    // printf("recent cpu: %d %d\n", thread_current()->recent_cpu_usage, ticks);
     if ((ticks % TIMER_FREQ) == 0) {
-        // printf("timer freq went inside %d ticks\n", ticks);
         thread_load_avg_calc ();
         thread_recent_cpu_calc_all();
     }
-    // printf("checking slice\n");
     // Check every 4th tick
     if ((ticks % TIME_SLICE) == 0) {
-      thread_priority_calc_all ();    // TODO : call '(if NECESSARY)'
+      thread_priority_calc_all ();
       intr_yield_on_return();
     }
-    // printf("done with thread tick\n");
   }
 
   /* Enforce preemption. */
@@ -289,7 +281,7 @@ thread_unblock (struct thread *t)
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
 
-  list_insert_ordered (&ready_list, &t->elem, pri_comparator, NULL);
+  list_push_back(&ready_list, &t->elem);
 
   t->status = THREAD_READY;
 
@@ -363,7 +355,7 @@ thread_yield (void)
   old_level = intr_disable ();
   if (cur != idle_thread) {
     /* Adding to ready list in priority queue fashion (maximal) */
-    list_insert_ordered(&ready_list, &(cur->elem), pri_comparator, NULL);
+    list_push_back(&ready_list, &(cur->elem));
   } 
   cur->status = THREAD_READY;
   schedule ();
@@ -392,7 +384,7 @@ void
 thread_set_priority (int new_priority) 
 { 
   thread_current ()->priority = new_priority;
-  if ((list_entry(list_begin(&ready_list), struct thread, elem)) -> priority > 
+  if ((list_entry(list_max(&ready_list, pri_comparator, NULL), struct thread, elem)) -> priority > 
           new_priority) {
             thread_yield();
   }
@@ -437,28 +429,21 @@ thread_priority_calc_all (void) {
       thread_priority_calc (t);
     }
   
-  // printf("sorting\n");
-  
   enum intr_level old_level; 
   old_level = intr_disable();
   if (list_empty (&ready_list))
     return;
-  // printf("size of ready list : %d \n", list_size(&ready_list));
-  // list_sort (&ready_list, pri_comparator, NULL);
-  // printf("done with CALC ALL");
   intr_set_level(old_level);
-  // printf("done with CALC ALL");
 }
 
 /* Sets the current thread's nice value to NICE. */
 void
 thread_set_nice (int new_nice) {
   thread_current ()->niceness = new_nice;
-  // int old_priority = thread_get_priority();
   thread_recent_cpu_calc (thread_current());
   thread_priority_calc (thread_current());
 
-  if (thread_get_priority() < (list_entry(list_begin(&ready_list), struct thread, elem) -> priority)) {
+  if (thread_get_priority() < (list_entry(list_max(&ready_list, pri_comparator, NULL), struct thread, elem) -> priority)) {
     thread_yield();
   }
 }
@@ -475,12 +460,7 @@ thread_load_avg_calc (void) {
   if (thread_current () != idle_thread) {
     ready_threads++;
   }
-  // printf("load average before --> %d\n", load_avg);
-  // printf("num ready threads: %d\n", ready_threads);
   load_avg = mul_fp_fp (convert_int_to_fp (59) / (60), load_avg) + convert_int_to_fp (1) / 60 * ready_threads;
-  // printf("calc2: %d \n", convert_int_to_fp (59) / 60);
-  // printf("calc2: %d \n", convert_int_to_fp(1) / 60);
-  // printf("load_avg finally --> %d\n", load_avg);
 }
 
 /* Returns 100 times the system load average. */
@@ -650,8 +630,12 @@ next_thread_to_run (void)
   if (list_empty (&ready_list)) {
     return idle_thread;
   }
-  else
-    return list_entry (list_pop_front (&ready_list), struct thread, elem);
+  else {
+    struct list_elem *max_elem = list_max (&ready_list, pri_comparator, NULL);
+    struct thread *t = list_entry (max_elem, struct thread, elem);
+    list_remove(max_elem);
+    return t;
+  }
 }
 
 /* Completes a thread switch by activating the new thread's page
@@ -746,6 +730,6 @@ bool
 pri_comparator (const struct list_elem *a,
             const struct list_elem *b,
             void *aux UNUSED) {
-              return ((list_entry(a, struct thread, elem) -> priority) >= 
+              return ((list_entry(a, struct thread, elem) -> priority) < 
                 (list_entry(b, struct thread, elem) -> priority));
 }
