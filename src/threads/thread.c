@@ -420,7 +420,8 @@ thread_set_priority (int new_priority)
               {
               /* A doner donee reference now needs to be established 
                   where curr -> donee and donor -> waiter
-                  Note: interrupts are disables to avoid synchronisation issues */
+                  Note: interrupts are disables 
+                  to avoid synchronisation issues */
                 enum intr_level old_level;
                 old_level = intr_disable ();
 
@@ -439,8 +440,8 @@ thread_set_priority (int new_priority)
     thread_current ()->priority = new_priority;
   }
 
-  if ((list_entry(list_max(&ready_list, pri_comparator, NULL), struct thread, elem)) -> priority > 
-      thread_get_priority()) 
+  if ((list_entry(list_max(&ready_list, pri_comparator, NULL), 
+      struct thread, elem)) -> priority > thread_get_priority()) 
   {
     thread_yield();
   }
@@ -505,7 +506,9 @@ thread_set_nice (int new_nice)
   thread_recent_cpu_calc (thread_current());
   thread_priority_calc (thread_current());
 
-  if (thread_get_priority() < (list_entry(list_max(&ready_list, pri_comparator, NULL), struct thread, elem) -> priority)) 
+  if (thread_get_priority() < (list_entry(list_max
+  (&ready_list, pri_comparator, NULL), 
+  struct thread, elem) -> priority)) 
     thread_yield();
 }
 
@@ -554,8 +557,10 @@ thread_recent_cpu_calc (struct thread *curr)
   if (curr == idle_thread) {
     return;
   }
-  curr->recent_cpu_usage = add_int_to_fp (curr->niceness, mul_fp_fp(div_fp_fp((2 * load_avg)
-                                          , add_int_to_fp(1, (2 * load_avg))), curr->recent_cpu_usage));
+  curr->recent_cpu_usage = add_int_to_fp (curr->niceness, 
+                          mul_fp_fp(div_fp_fp((2 * load_avg), 
+                          add_int_to_fp(1, (2 * load_avg))), 
+                          curr->recent_cpu_usage));
 }
 
 /* Recalculates the recent CPU usage of all the threads*/
