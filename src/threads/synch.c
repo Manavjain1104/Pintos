@@ -118,7 +118,8 @@ sema_up (struct semaphore *sema)
   struct thread *popped = NULL;
   old_level = intr_disable ();
   if (!list_empty (&sema->waiters)) {
-    struct list_elem *max_elem = list_max (&sema->waiters, pri_comparator, NULL);
+    struct list_elem *max_elem = 
+                            list_max (&sema->waiters, pri_comparator, NULL);
     popped = list_entry (max_elem, struct thread, elem);
     list_remove(max_elem);
     thread_unblock (popped);
@@ -418,7 +419,8 @@ cond_signal (struct condition *cond, struct lock *lock UNUSED)
   ASSERT (lock_held_by_current_thread (lock));
 
   if (!list_empty (&cond->waiters)) {
-    struct list_elem *max_elem = list_max (&cond->waiters, cond_pri_comparator, NULL);
+    struct list_elem *max_elem = 
+                          list_max (&cond->waiters, cond_pri_comparator, NULL);
     list_remove(max_elem);
     sema_up (&list_entry (max_elem, struct semaphore_elem, elem)->semaphore);
   }
