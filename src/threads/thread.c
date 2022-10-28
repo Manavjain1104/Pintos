@@ -116,7 +116,6 @@ thread_start (void)
   sema_init (&idle_started, 0);
   thread_create ("idle", PRI_MIN, idle, &idle_started);
 
-
   /* Start preemptive thread scheduling. */
   intr_enable ();
 
@@ -148,19 +147,26 @@ thread_tick (void) {
   else
     kernel_ticks++;
 
-  if (thread_mlfqs) {
-    // increment recent CPU usage when not in idle thread
-    if (thread_current() != idle_thread) {
-      thread_current ()->recent_cpu_usage = 
-        add_int_to_fp(1, thread_current ()->recent_cpu_usage);
+  if (thread_mlfqs) 
+  {
+    // Increments Recent CPU usage when not in the idle thread
+    if (thread_current() != idle_thread) 
+    {
+      thread_current () -> recent_cpu_usage = 
+        add_int_to_fp(1, thread_current () -> recent_cpu_usage);
     }
     int ticks = timer_ticks();
-    if ((ticks % TIMER_FREQ) == 0) {
+
+    // Condition to calculate priority and load average every second
+    if ((ticks % TIMER_FREQ) == 0) 
+    {
         thread_load_avg_calc ();
         thread_recent_cpu_calc_all();
     }
+
     // Check every 4th tick
-    if ((ticks % TIME_SLICE) == 0) {
+    if ((ticks % TIME_SLICE) == 0) 
+    {
       thread_priority_calc_all ();
       intr_yield_on_return();
     }
@@ -168,7 +174,9 @@ thread_tick (void) {
 
   /* Enforce preemption. */
   if (++thread_ticks >= TIME_SLICE)
+  {
     intr_yield_on_return ();
+  }
 }
 
 /* Prints thread statistics. */
@@ -353,10 +361,12 @@ thread_yield (void)
   ASSERT (!intr_context ());
 
   old_level = intr_disable ();
-  if (cur != idle_thread) {
+  if (cur != idle_thread) 
+  {
     /* Adding to ready list in priority queue fashion (maximal) */
     list_push_back(&ready_list, &(cur->elem));
   } 
+  
   cur->status = THREAD_READY;
   schedule ();
   intr_set_level (old_level);
@@ -383,46 +393,56 @@ thread_foreach (thread_action_func *func, void *aux)
 void
 thread_set_priority (int new_priority) 
 { 
-  if (!thread_mlfqs) {
+  if (!thread_mlfqs) 
+  {
     struct thread *cur = thread_current ();
+
     int old_base_priority = cur->base_priority;
     cur->base_priority = new_priority;
 
-    // check if priority went down - in which case
-    // another thread waiting inside the semaphore may become a donor
-    if (old_base_priority > new_priority) {
+    /* Check if the priority went down in which case another
+     waiting thread inside the semaphore may become a donor */
+    if (old_base_priority > new_priority) 
+    {
       struct list_elem *e;
       struct list_elem *f;
       for (e = list_begin (&cur->locks_downed);
-          e != list_end (&cur->locks_downed); e = list_next (e)) {
-          struct list *waiters = &(list_entry(e, struct lock, elem)
-                                    ->semaphore.waiters);
-          for (f = list_begin (waiters); f != list_end (waiters);
-              f = list_next (f)) {
-                struct thread *donor = list_entry(f, struct thread, elem);
-                if (donor->priority > new_priority 
-                    && donor->priority <= old_base_priority) {
-                  // a doner donee reference now needs to be established 
-                  // curr -> donee and donor -> waiter
-                  // Note: interrupts are disables to avoid synchronisation issues
-                  enum intr_level old_level;
-                  old_level = intr_disable ();
-                  list_insert_ordered(&cur->donations, &donor->don_elem, 
-                    donor_comparator, NULL);
-                  donor->donee = thread_current();
-                  intr_set_level (old_level);
-                }
+          e != list_end (&cur->locks_downed); e = list_next (e)) 
+      {
+        struct list *waiters = &(list_entry(e, struct lock, elem)
+            ->semaphore.waiters);
+        for (f = list_begin (waiters); f != list_end (waiters);
+            f = list_next (f)) 
+          {
+            struct thread *donor = list_entry(f, struct thread, elem);
+            if (donor->priority > new_priority 
+                && donor->priority <= old_base_priority) 
+              {
+              /* A doner donee reference now needs to be established 
+                  where curr -> donee and donor -> waiter
+                  Note: interrupts are disables to avoid synchronisation issues */
+                enum intr_level old_level;
+                old_level = intr_disable ();
+
+                list_insert_ordered(&cur->donations, &donor->don_elem, 
+                donor_comparator, NULL);
+
+                donor->donee = thread_current();
+                intr_set_level (old_level);
+              }
           }
       }
     }
     calculate_priority(cur);
-  } else {
+  } else 
+  {
     thread_current ()->priority = new_priority;
   }
 
   if ((list_entry(list_max(&ready_list, pri_comparator, NULL), struct thread, elem)) -> priority > 
-          thread_get_priority()) {
-            thread_yield();
+      thread_get_priority()) 
+  {
+    thread_yield();
   }
 }
 
@@ -434,16 +454,18 @@ thread_get_priority (void)
 }
 
 void
-thread_priority_calc (struct thread *curr) {
+thread_priority_calc (struct thread *curr) 
+{
   ASSERT (is_thread (curr));
   
-  if (curr == idle_thread) {
+  if (curr == idle_thread) 
+  {
     return; 
   }
 
   int pri = PRI_MAX 
-                  - (convert_to_int_towards_zero (curr->recent_cpu_usage / 4)) 
-                  - (curr->niceness * 2);
+          - (convert_to_int_towards_zero (curr->recent_cpu_usage / 4)) 
+          - (curr->niceness * 2);
   
   if (pri > PRI_MAX)
     pri = PRI_MAX;
@@ -453,6 +475,7 @@ thread_priority_calc (struct thread *curr) {
   curr->priority = pri;
 }
 
+/* Recalculates the priotity of all the threads*/
 void
 thread_priority_calc_all (void) {
   struct list_elem *e;
@@ -467,36 +490,44 @@ thread_priority_calc_all (void) {
   
   enum intr_level old_level; 
   old_level = intr_disable();
+  
   if (list_empty (&ready_list))
     return;
+
   intr_set_level(old_level);
 }
 
 /* Sets the current thread's nice value to NICE. */
 void
-thread_set_nice (int new_nice) {
+thread_set_nice (int new_nice) 
+{
   thread_current ()->niceness = new_nice;
   thread_recent_cpu_calc (thread_current());
   thread_priority_calc (thread_current());
 
-  if (thread_get_priority() < (list_entry(list_max(&ready_list, pri_comparator, NULL), struct thread, elem) -> priority)) {
+  if (thread_get_priority() < (list_entry(list_max(&ready_list, pri_comparator, NULL), struct thread, elem) -> priority)) 
     thread_yield();
-  }
 }
 
 /* Returns the current thread's nice value. */
 int
-thread_get_nice (void) {
+thread_get_nice (void) 
+{
   return (thread_current()->niceness);
 }
 
+
+/*Calculates the load average at the current time*/
 void
-thread_load_avg_calc (void) {
+thread_load_avg_calc (void) 
+{
   int ready_threads = threads_ready();
-  if (thread_current () != idle_thread) {
+  if (thread_current () != idle_thread) 
+  {
     ready_threads++;
   }
-  load_avg = mul_fp_fp (convert_int_to_fp (59) / (60), load_avg) + convert_int_to_fp (1) / 60 * ready_threads;
+  load_avg = mul_fp_fp (convert_int_to_fp (59) / (60), load_avg) 
+            + convert_int_to_fp (1) / 60 * ready_threads;
 }
 
 /* Returns 100 times the system load average. */
@@ -514,23 +545,28 @@ thread_get_recent_cpu (void)
   return convert_to_nearest_int(100 * cur->recent_cpu_usage);
 }
 
+/*Calculates the recent CPU usage for given thread*/
 void
-thread_recent_cpu_calc (struct thread *curr) {
+thread_recent_cpu_calc (struct thread *curr) 
+{
   ASSERT (is_thread (curr));
   
   if (curr == idle_thread) {
     return;
   }
-  curr->recent_cpu_usage = add_int_to_fp (curr->niceness, mul_fp_fp(div_fp_fp((2 * load_avg), add_int_to_fp(1, (2 * load_avg))), curr->recent_cpu_usage));
+  curr->recent_cpu_usage = add_int_to_fp (curr->niceness, mul_fp_fp(div_fp_fp((2 * load_avg)
+                                          , add_int_to_fp(1, (2 * load_avg))), curr->recent_cpu_usage));
 }
 
+/* Recalculates the recent CPU usage of all the threads*/
 void
-thread_recent_cpu_calc_all (void) {
+thread_recent_cpu_calc_all (void) 
+{
   struct list_elem *e;
   struct thread *t;
   
   for (e = list_begin (&all_list); e != list_end (&all_list);
-          e = list_next (e))
+        e = list_next (e))
     {
       t = list_entry (e, struct thread, allelem);
       thread_recent_cpu_calc (t);
