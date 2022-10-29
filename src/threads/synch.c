@@ -235,10 +235,7 @@ lock_acquire (struct lock *lock)
       calculate_priority(holder);
       
       // recording donee inside the donor threads structure
-      cur->donee = holder;
-
-      // rearrange ready_list() -> remove + list_insert_ordered
-      re_arrange(holder);      
+      cur->donee = holder;    
     }
     sema_down (&lock->semaphore);
   }
@@ -450,5 +447,6 @@ static bool cond_pri_comparator (const struct list_elem *a,
 
 bool donor_comparator (const struct list_elem *a, 
   const struct list_elem *b, void *aux UNUSED) {
-    return COMPARATOR(don_elem);
+    return (list_entry(a, struct thread, don_elem) -> priority)
+       > (list_entry(b, struct thread, don_elem) -> priority);
 }

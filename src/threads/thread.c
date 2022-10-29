@@ -813,7 +813,6 @@ bool
 pri_comparator (const struct list_elem *a,
             const struct list_elem *b,
             void *aux UNUSED) {
-  // return COMPARATOR(elem);
   return (list_entry(a, struct thread, elem) -> priority)
         < (list_entry(b, struct thread, elem) -> priority);
 }
@@ -864,10 +863,4 @@ void calculate_priority(struct thread *t) {
   // synchronisation problems are not a problem as 
   // end result is same in all cases.
   calculate_priority(donee_thread);
-}
-
-/* re-arrange ready_list */
-void re_arrange(struct thread *t) {
-  list_remove(&t->elem);
-  list_insert_ordered(&ready_list, &t->elem, pri_comparator, NULL);
 }

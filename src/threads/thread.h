@@ -8,10 +8,6 @@
 #include "fixed-point.h"
 #include "devices/timer.h"
 
-#define COMPARATOR(elem_name)\
-((list_entry(a, struct thread, elem_name) -> priority)\
-   > (list_entry(b, struct thread, elem_name) -> priority))
-
 /* States in a thread's life cycle. */
 enum thread_status
   {
