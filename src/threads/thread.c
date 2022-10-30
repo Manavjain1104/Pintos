@@ -455,47 +455,35 @@ thread_get_priority (void)
 }
 
 void
-thread_priority_calc (struct thread *curr) 
+thread_priority_calc (struct thread *t, void *aux UNUSED) 
 {
-  ASSERT (is_thread (curr));
+  ASSERT (is_thread (t));
   
-  if (curr == idle_thread) 
+  if (t == idle_thread) 
   {
     return; 
   }
 
   int pri = PRI_MAX 
-          - (convert_to_int_towards_zero (curr->recent_cpu_usage / 4)) 
-          - (curr->niceness * 2);
+          - (convert_to_int_towards_zero (t->recent_cpu_usage / 4)) 
+          - (t->niceness * 2);
   
   if (pri > PRI_MAX)
     pri = PRI_MAX;
   else if (pri < PRI_MIN)
     pri = PRI_MIN;
   
-  curr->priority = pri;
+  t->priority = pri;
 }
 
 /* Recalculates the priotity of all the threads*/
 void
 thread_priority_calc_all (void) {
-  struct list_elem *e;
-  struct thread *t;
-  
-  for (e = list_begin (&all_list); e != list_end (&all_list);
-          e = list_next (e))
-    {
-      t = list_entry (e, struct thread, allelem);
-      thread_priority_calc (t);
-    }
-  
-  enum intr_level old_level; 
-  old_level = intr_disable();
+
+  thread_foreach(thread_priority_calc, NULL);
   
   if (list_empty (&ready_list))
     return;
-
-  intr_set_level(old_level);
 }
 
 /* Sets the current thread's nice value to NICE. */
@@ -503,8 +491,8 @@ void
 thread_set_nice (int new_nice) 
 {
   thread_current ()->niceness = new_nice;
-  thread_recent_cpu_calc (thread_current());
-  thread_priority_calc (thread_current());
+  thread_recent_cpu_calc (thread_current(), NULL);
+  thread_priority_calc (thread_current(), NULL);
 
   if (thread_get_priority() < (list_entry(list_max
   (&ready_list, pri_comparator, NULL), 
@@ -550,32 +538,24 @@ thread_get_recent_cpu (void)
 
 /*Calculates the recent CPU usage for given thread*/
 void
-thread_recent_cpu_calc (struct thread *curr) 
+thread_recent_cpu_calc (struct thread *t, void *aux UNUSED) 
 {
-  ASSERT (is_thread (curr));
+  ASSERT (is_thread (t));
   
-  if (curr == idle_thread) {
+  if (t == idle_thread) {
     return;
   }
-  curr->recent_cpu_usage = add_int_to_fp (curr->niceness, 
+  t->recent_cpu_usage = add_int_to_fp (t->niceness, 
                           mul_fp_fp(div_fp_fp((2 * load_avg), 
                           add_int_to_fp(1, (2 * load_avg))), 
-                          curr->recent_cpu_usage));
+                          t->recent_cpu_usage));
 }
 
 /* Recalculates the recent CPU usage of all the threads*/
 void
 thread_recent_cpu_calc_all (void) 
 {
-  struct list_elem *e;
-  struct thread *t;
-  
-  for (e = list_begin (&all_list); e != list_end (&all_list);
-        e = list_next (e))
-    {
-      t = list_entry (e, struct thread, allelem);
-      thread_recent_cpu_calc (t);
-    }
+  thread_foreach(thread_recent_cpu_calc, NULL);
 }
 
 /* Idle thread.  Executes when no other thread is ready to run.
@@ -678,7 +658,7 @@ init_thread (struct thread *t, const char *name, int priority)
     else
       t->recent_cpu_usage = 0;
     t -> niceness = 0;
-    thread_priority_calc(t);
+    thread_priority_calc(t, NULL);
   } else {
     t -> priority = priority;
   }
