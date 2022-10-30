@@ -851,6 +851,7 @@ void calculate_priority(struct thread *t) {
   struct list_elem *f;
   for (f = list_begin(ds); f != list_end(ds); f = list_next(f)) {
     if (list_entry(f, struct thread, don_elem)->tid == t->tid) {
+      
       // re-order donation according to new priority
       list_remove(f);
       list_insert_ordered(ds, f, donor_comparator, NULL);
