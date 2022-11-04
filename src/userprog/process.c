@@ -323,7 +323,7 @@ load (char *file_name, void (**eip) (void), void **esp)
     goto done;
   
   /* test stack */
-  hex_dump(esp, esp, PHYS_BASE - *esp, 0);
+  hex_dump(*esp, *esp, PHYS_BASE - *esp, true);
   printf("finished hex dump\n");
 
   /* Start address. */
@@ -471,8 +471,8 @@ setup_stack (void **esp, char *fn_copy, char *saveptr)
   if (kpage != NULL) 
     {
       success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);
-      int len_args = 0;
       *esp = PHYS_BASE;
+      // printf("INITIAL *ESP: %p\n", *esp);
       // char* arg_arr[argc];
       if (success) {
         int argc = 1;
@@ -482,12 +482,15 @@ setup_stack (void **esp, char *fn_copy, char *saveptr)
         }
         argc++;
         char *arg_pt_arr[argc];
-        int len;
         char *arg;
-        int fn_copy_len = strlen(fn_copy) + 1;
-        *esp = *esp - fn_copy_len;
-        arg_pt_arr[0] = (char *) *esp;
-        strlcpy(*esp, fn_copy, fn_copy_len);
+        int len = strlen(fn_copy) + 1;
+        int len_args = len;
+        *esp = *esp - len;
+        // printf("Before arg pt arr: %u, %p\n", *esp, *esp);
+        arg_pt_arr[0] = *esp;
+        // printf("afer arg pt arr: %p\n", arg_pt_arr[0]);
+        // memcpy(arg_pt_arr, esp, sizeof(char *));
+        strlcpy(*esp, fn_copy, len);
 
         /* set up arguments on the top of stack */
         int i = 1;
@@ -495,6 +498,7 @@ setup_stack (void **esp, char *fn_copy, char *saveptr)
           // printf("ARG:%s\n", arg);
           len = strlen(arg) + 1;
           *esp = *esp - len;
+          // printf("WHILE *ESP: %p\n", *esp);
           arg_pt_arr[i] = (char *) *esp;
           i++;
           len_args += len;
@@ -506,22 +510,32 @@ setup_stack (void **esp, char *fn_copy, char *saveptr)
         ASSERT(i == argc);
 
         /* word_align the top arguments and set argv[argc] to null */
-        int len_align = WORD_LENGTH - (len_args % WORD_LENGTH);
+        int len_align = 0;
+        if ((len_args % WORD_LENGTH) > 0) {
+          len_align = WORD_LENGTH - (len_args % WORD_LENGTH);
+        }
+        
+        // printf("len align is %d\n" ,len_align);
         *esp = *esp - len_align - sizeof(char *);
+        // printf("LEN ALIGN STAGE *ESP: %p\n", *esp);
   
         /* set up the pointer to arguments */
         for (i = argc - 1; i >= 0; i--) {
           *esp = *esp - sizeof(char *);
+          // printf("ARGC PUT *ESP: %p\n", *esp);
           // *esp = arg_pt_arr[i];
-          memcpy(*esp, arg_pt_arr[i], sizeof(char *));
+          memcpy(*esp, &arg_pt_arr[i], sizeof(char *));
         }
 
         /* set up argv and argc on the stack */
-        memcpy((*esp - sizeof(char *)), *esp, sizeof(char *));
+        // *(*esp - sizeof(char *) = *esp;
+        memcpy((*esp - sizeof(char *)), esp, sizeof(char *));
         *esp = *esp - sizeof(char *) - sizeof(int);
+        // printf("ARGV *ESP: %p\n", *esp);
         memcpy(*esp, &argc, sizeof(int));
         /* set up fake return address */
         *esp = *esp - sizeof(void *);
+        // printf("FINAL *ESP: %p\n", *esp);
       }
       else
         palloc_free_page (kpage);
