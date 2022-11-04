@@ -1,6 +1,8 @@
 #ifndef THREADS_INTERRUPT_H
 #define THREADS_INTERRUPT_H
 
+#define WORD_LENGTH 4
+
 #include <stdbool.h>
 #include <stdint.h>
 
