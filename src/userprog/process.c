@@ -50,16 +50,7 @@ process_execute (const char *file_name)
 static void
 start_process (void *fn_copy)
 { 
-
-  // /* parsing the arguments in the file_name copy */
-  // char *arg;
-  // char args[MAX_NUM_ARGS][MAX_ARGS_SIZE];
-  // char *saveptr;
-  // int argc = 0;   // wouldnt store on stack here 
-  // // differ to load
-  // while ((arg = strtok_r(fn_copy, " ", &saveptr))) {
-  //   strlcpy(args[argc++], arg, (strlen(arg) + 1));
-  // }
+  
   char *file_name = fn_copy;
   struct intr_frame if_;
   bool success;
