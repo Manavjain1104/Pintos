@@ -8,12 +8,13 @@
 #include "threads/interrupt.h"
 #include "threads/intr-stubs.h"
 #include "threads/palloc.h"
+#include "threads/malloc.h"
 #include "threads/switch.h"
 #include "threads/synch.h"
 #include "threads/vaddr.h"
-#ifdef USERPROG
+// #ifdef USERPROG
 #include "userprog/process.h"
-#endif
+// #endif
 
 /* Random value for struct thread's `magic' member.
    Used to detect stack overflow.  See the big comment at the top
@@ -244,6 +245,20 @@ thread_create (const char *name, int priority,
   sf->eip = switch_entry;
   sf->ebp = 0;
 
+
+  // #ifdef USERPROG
+  /* establishing a baby sitter for THREAD 't' in the parent */
+  struct baby_sitter *bs 
+    = (struct baby_sitter *) malloc(sizeof(struct baby_sitter));
+  bs->sema = malloc(sizeof(struct semaphore));
+  sema_init(bs->sema, 0);
+  bs->exit_status = 0;
+  bs->child = t;
+  bs->child_tid = tid;
+  t->nanny = bs;
+  list_push_back(&thread_current()->baby_sitters, &bs->elem);
+  // #endif
+
   intr_set_level (old_level);
 
   /* Add to run queue. */
@@ -344,8 +359,47 @@ thread_exit (void)
      and schedule another process.  That process will destroy us
      when it calls thread_schedule_tail(). */
   intr_disable ();
-  list_remove (&thread_current()->allelem);
-  thread_current ()->status = THREAD_DYING;
+  struct thread *t = thread_current();
+  list_remove (&t->allelem);
+
+  /* release all locks that the exiting thread holds */
+  struct list_elem *e;
+  struct list_elem *temp;
+  struct list *ls = &t->locks_downed;
+  for (e = list_begin(ls);
+       e != list_end(ls);)
+  {
+    temp = e;
+    e = list_next(e);
+    list_remove(temp);
+    lock_release(list_entry(e, struct lock, elem));
+  }
+
+  /* fix parent and child referecences of baby_sitters */
+  
+  ls = &t->baby_sitters;
+  struct baby_sitter *bs;
+  for (e = list_begin(ls);
+       e != list_end(ls);
+       e = list_next(e))
+  {
+    bs = list_entry(e, struct baby_sitter, elem);
+    if (bs->child != NULL)
+    {
+      bs->child->nanny = NULL;
+    }
+    free_baby_sitter(bs);
+  }
+
+  if (t->nanny != NULL)
+  {
+    // means parent has not exited, so we need to sema up 
+    // the baby_sitter the sema inside
+    t->nanny->child = NULL;
+    sema_up(t->nanny->sema);
+  }
+
+  t->status = THREAD_DYING;
   schedule ();
   NOT_REACHED ();
 }
@@ -651,6 +705,8 @@ init_thread (struct thread *t, const char *name, int priority)
   list_init(&t->donations);
   t->donee = NULL;
   list_init(&t->locks_downed);
+  list_init (&t->baby_sitters);
+
 
   if (thread_mlfqs) {
     if (t != initial_thread)

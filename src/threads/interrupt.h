@@ -55,6 +55,9 @@ struct intr_frame
     uint32_t eflags;            /* Saved CPU flags. */
     void *esp;                  /* Saved stack pointer. */
     uint16_t ss, :16;           /* Data segment for esp. */
+
+    // bool is_syscall;            /* tells page-fault that 
+    //                             interupt frame is in page_fault*/
   };
 
 typedef void intr_handler_func (struct intr_frame *);

@@ -2,11 +2,8 @@
 #define USERPROG_SYSCALL_H
 
 #define NUM_SYS_CALLS 20
+#define SYSCALL_INTR_NUM 0x30
 
 void syscall_init (void);
-
-/* defining types for common system calls */
-
-int open(const char *file);
 
 #endif /* userprog/syscall.h */

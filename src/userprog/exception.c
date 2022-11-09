@@ -1,4 +1,6 @@
 #include "userprog/exception.h"
+#include "userprog/process.h"
+#include "userprog/syscall.h"
 #include <inttypes.h>
 #include <stdio.h>
 #include "userprog/gdt.h"
@@ -75,7 +77,7 @@ kill (struct intr_frame *f)
      the kernel.  Real Unix-like operating systems pass most
      exceptions back to the process via signals, but we don't
      implement them. */
-     
+
   /* The interrupt frame's code segment value tells us where the
      exception originated. */
   switch (f->cs)
@@ -146,8 +148,13 @@ page_fault (struct intr_frame *f)
   user = (f->error_code & PF_U) != 0;
 
   /* handle page_faults gracefully for user invalid access */
-  f->eip = (void (*)(void)) f->eax;
-  f->eax = 0xffffffff; 
+  if (f->vec_no == SYSCALL_INTR_NUM) 
+  {
+      f->eax = 0xffffffff; 
+      f->eip = (void (*)(void)) f->eax;
+      return;
+  }
+  
 
   /* To implement virtual memory, delete the rest of the function
      body, and replace it with code that brings in the page to
@@ -157,6 +164,7 @@ page_fault (struct intr_frame *f)
           not_present ? "not present" : "rights violation",
           write ? "writing" : "reading",
           user ? "user" : "kernel");
+
   kill (f);
 }
 

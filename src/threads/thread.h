@@ -110,10 +110,17 @@ struct thread
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
 
-#ifdef USERPROG
+// #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
-#endif
+    
+    /* to allow thread to be part of children list in 
+    parent process thread */
+    struct baby_sitter *nanny;
+    
+    /* children threads of the current thread */
+    struct list baby_sitters;
+// #endif
 
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */

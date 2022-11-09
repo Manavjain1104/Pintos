@@ -15,6 +15,8 @@
 #include "threads/init.h"
 #include "threads/interrupt.h"
 #include "threads/palloc.h"
+#include "threads/malloc.h"
+#include "threads/synch.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 
@@ -84,13 +86,36 @@ start_process (void *fn_copy)
  * If TID is invalid or if it was not a child of the calling process, or if 
  * process_wait() has already been successfully called for the given TID, 
  * returns -1 immediately, without waiting.
- * 
- * This function will be implemented in task 2.
- * For now, it does nothing. */
+ */
 int
 process_wait (tid_t child_tid UNUSED) 
 {
-  while (true) {};
+  // TODO: hash map worth is???, synchronisation??? --> interrupts
+
+  // enum intr_level old_level;
+  // old_level = 
+  /* is it a valid child and has child terminated */
+  struct list_elem *e;
+  struct baby_sitter *bs;
+  struct list *bss = &thread_current()->baby_sitters;
+  for (e = list_begin(bss);
+       e != list_end(bss);
+       e = list_next(e))
+  { 
+    bs = list_entry(e, struct baby_sitter, elem);
+    if (bs->child_tid == child_tid)
+    {
+      // it must be a valid child, parent should wait for it to exit
+      sema_down(bs->sema);
+
+      // now child has exited
+      list_remove(&bs->elem);
+      int exit_status = bs->exit_status;
+      free_baby_sitter(bs);
+      return exit_status;
+    }
+  }
+  return -1; // did not find valid child
 }
 
 /* Free the current process's resources. */
@@ -552,4 +577,9 @@ install_page (void *upage, void *kpage, bool writable)
      address, then map our page there. */
   return (pagedir_get_page (t->pagedir, upage) == NULL
           && pagedir_set_page (t->pagedir, upage, kpage, writable));
+}
+
+void free_baby_sitter(struct baby_sitter *bs) {
+  free(bs->sema);
+  free(bs);
 }
