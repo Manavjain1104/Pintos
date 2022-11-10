@@ -33,6 +33,7 @@ process_execute (const char *file_name)
   char *fn_copy;
   tid_t tid;
 
+  // printf("process_execute %s", file_name);
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
   fn_copy = palloc_get_page (0); 
@@ -40,8 +41,16 @@ process_execute (const char *file_name)
     return TID_ERROR;
   strlcpy (fn_copy, file_name, PGSIZE);
 
+  /* extract out command name for the thread name */
+  char *name = malloc(sizeof(char) * PGSIZE);
+  strlcpy (name, file_name, PGSIZE);
+  char *fakeptr;
+
   /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
+  tid = thread_create (strtok_r(name, " ", &fakeptr), 
+                        PRI_DEFAULT, start_process, fn_copy);
+  free(name);
+
   if (tid == TID_ERROR)
     palloc_free_page (fn_copy);
   return tid;
@@ -339,8 +348,8 @@ load (char *file_name, void (**eip) (void), void **esp)
     goto done;
   
   /* test stack */
-  hex_dump(*esp, *esp, PHYS_BASE - *esp, true);
-  printf("finished hex dump\n");
+  // hex_dump(*esp, *esp, PHYS_BASE - *esp, true);
+  // printf("finished hex dump\n");
 
   /* Start address. */
   *eip = (void (*) (void)) ehdr.e_entry;

@@ -120,6 +120,12 @@ struct thread
     
     /* children threads of the current thread */
     struct list baby_sitters;
+
+    /* list of file descriptor objects held by current thread */
+    struct list fds;
+
+    /* exit status stored for process termination message */
+    int exit_status;
 // #endif
 
     /* Owned by thread.c. */

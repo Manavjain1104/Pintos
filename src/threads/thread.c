@@ -14,6 +14,7 @@
 #include "threads/vaddr.h"
 // #ifdef USERPROG
 #include "userprog/process.h"
+#include "userprog/syscall.h"
 // #endif
 
 /* Random value for struct thread's `magic' member.
@@ -376,7 +377,6 @@ thread_exit (void)
   }
 
   /* fix parent and child referecences of baby_sitters */
-  
   ls = &t->baby_sitters;
   struct baby_sitter *bs;
   for (e = list_begin(ls);
@@ -398,6 +398,18 @@ thread_exit (void)
     t->nanny->child = NULL;
     sema_up(t->nanny->sema);
   }
+
+  /* free fd objects held by the current thread */
+  ls = &t->fds;
+  for (e = list_begin(ls);
+       e != list_end(ls);)
+  {   
+    temp = e;
+    e = list_next(e);
+    free(list_entry(temp, struct fd_st, elem));
+  }
+
+  printf ("%s: exit(%d)\n", t->name, t->exit_status);
 
   t->status = THREAD_DYING;
   schedule ();
@@ -705,7 +717,9 @@ init_thread (struct thread *t, const char *name, int priority)
   list_init(&t->donations);
   t->donee = NULL;
   list_init(&t->locks_downed);
+  t->exit_status = 0;
   list_init (&t->baby_sitters);
+  list_init (&t->fds);
 
 
   if (thread_mlfqs) {
