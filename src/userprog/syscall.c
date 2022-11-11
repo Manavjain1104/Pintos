@@ -68,14 +68,15 @@ syscall_init (void)
 static void
 syscall_handler (struct intr_frame *f) 
 {
-  // printf ("system call!\n");
-
+  f->esp_dummy = 1;
   /* verifying and reading value at esp */
   int sys_call_num = get_word(f->esp);
 
   // printf("sys_call_num: %d\n", sys_call_num);
   handlers[sys_call_num] (f);
   // printf("ended system call %d\n", sys_call_num);
+
+  f->esp_dummy = 0;
   // TODO: ask mark file deny write to executable
 }
 

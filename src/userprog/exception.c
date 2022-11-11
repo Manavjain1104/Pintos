@@ -147,14 +147,14 @@ page_fault (struct intr_frame *f)
   write = (f->error_code & PF_W) != 0;
   user = (f->error_code & PF_U) != 0;
 
-  /* handle page_faults gracefully for user invalid access */
-  if (f->vec_no == SYSCALL_INTR_NUM) 
-  {
-      f->eax = 0xffffffff; 
-      f->eip = (void (*)(void)) f->eax;
-      return;
-  }
-  
+  /* handle page_faults gracefully for user invalid access.
+     If esp_dummy is true,  then page fault was caused in a syscall */
+  //i// f (f->esp_dummy) 
+  //{
+   f->eip = (void *) f->eax;
+   f->eax = 0xffffffff; 
+   return;
+// }
 
   /* To implement virtual memory, delete the rest of the function
      body, and replace it with code that brings in the page to

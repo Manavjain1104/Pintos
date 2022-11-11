@@ -501,11 +501,24 @@ setup_stack (void **esp, char *fn_copy, char *saveptr)
       // char* arg_arr[argc];
       if (success) {
         int argc = 1;
-        for (char *pt = saveptr; *pt != '\0'; pt++) {
-          if (*pt == ' ') 
-            argc++;
+        char *pt;
+        bool prevspace = false;
+        for (pt = saveptr; *pt != '\0'; pt++) {
+          if (*pt == ' ')
+          {
+            if (!prevspace)
+            {
+              argc++;
+            }
+            prevspace = true;
+          } else {
+            prevspace = false;
+          }
         }
-        argc++;
+        if (pt > saveptr)
+        {
+          argc++;
+        }
         char *arg_pt_arr[argc];
         char *arg;
         int len = strlen(fn_copy) + 1;
@@ -520,6 +533,10 @@ setup_stack (void **esp, char *fn_copy, char *saveptr)
         /* set up arguments on the top of stack */
         int i = 1;
         while ((arg = strtok_r(NULL, " ", &saveptr))) {
+          if (strlen(arg) == 0)
+          {
+            continue;
+          }
           // printf("ARG:%s\n", arg);
           len = strlen(arg) + 1;
           *esp = *esp - len;
@@ -528,7 +545,9 @@ setup_stack (void **esp, char *fn_copy, char *saveptr)
           i++;
           len_args += len;
           strlcpy(*esp, arg, len);
+          // printf("Arg: %s\n", arg);
         }
+        // printf("argc: %d\n", argc);
 
         /* check that strtok_r got the right number of args */
         // printf("i = %d , argc: %d \n", i, argc);
