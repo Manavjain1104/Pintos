@@ -17,8 +17,9 @@ static int get_word (const uint8_t *uaddr);
 static int get_user (const uint8_t *uaddr);
 static int get_byte (const uint8_t *uaddr);
 static bool put_user (uint8_t *udst, uint8_t byte);
-static bool put_byte (uint8_t *udst, uint8_t byte);
+static void put_byte (uint8_t *udst, uint8_t byte);
 static int allocate_fd (void);
+static void delete_thread (void);
 static struct fd_st *get_fd (int fd);
 
 /* struct to store child-parent relationship */
@@ -91,7 +92,7 @@ get_word (const uint8_t *uaddr)
   int byte;
   for (int i = (WORD_LENGTH - 1); i >= 0; i--) {
     byte = get_byte(uaddr + i);
-    // printf("byte: %x\n", byte);
+    // printf("byte: %x\n", ibyte);
     if (byte == -1) 
     {
       return -1;
@@ -117,7 +118,8 @@ get_user (const uint8_t *uaddr)
 
 /* Reads a byte at user virtual address UADDR.
   Returns the byte value if successful, -1 if a segfault
-  occurred. (wrapper for get_user function)*/
+  occurred. (wrapper for get_user function)
+  NOTE:- Trigger a page_fault.*/
 static int
 get_byte (const uint8_t *uaddr)
 {
@@ -143,19 +145,20 @@ put_user (uint8_t *udst, uint8_t byte)
 }
 
 /* Writes BYTE to user address UDST.
-  Returns true if successful, false if a segfault occurred.
-  (wrapper for put_user) */
-static bool
+  If fails to write at user address, sets exit status to -1 and thread exits.
+  NOTE:- Does not trigger page_fault */
+static void
 put_byte (uint8_t *udst, uint8_t byte)
 {
+  
   if (is_user_vaddr(udst))
   {
     if (put_user(udst, byte))
     {
-      return true;
+      return;
     }
   }
-  return false;
+  delete_thread();
 }
 
 /* system call functions */
@@ -171,11 +174,11 @@ void
 exec_handler(struct intr_frame *f) 
 {
   int word = get_word(f->esp + sizeof(void *));
-  if (word < 0)
-  {
-    f->eax = 0xffffffff;
-    return;
-  } 
+  // if (word < 0)
+  // {
+  //   f->eax = 0xffffffff;
+  //   return;
+  // } 
   f->eax = process_execute((char *) word);
 }
 
@@ -201,11 +204,11 @@ wait_handler(struct intr_frame *f)
   old_level = intr_disable();  // TODO: ask Mark???
   int child_pid = get_word(f->esp + sizeof(void *));
   // printf("Thread %s waiting on pid %d\n", thread_current()->name, child_pid);
-  if (child_pid == -1)
-  {
-    f->eax = 0xffffffff;
-    return;
-  }
+  // if (child_pid == -1)
+  // {
+  //   f->eax = 0xffffffff;
+  //   return;
+  // }
   f->eax = process_wait(child_pid);
   intr_set_level(old_level);
 }
@@ -214,11 +217,11 @@ void
 open_handler(struct intr_frame *f) 
 {
   int word = get_word(f->esp + sizeof(void *));
-  if (word == -1) 
-  {
-    f->eax = 0xffffffff;
-    return;
-  }
+  // if (word == -1) 
+  // {
+  //   f->eax = 0xffffffff;
+  //   return;
+  // }
   // TODO SYNCHRONISATION
   struct fd_st *fd_obj = malloc(sizeof(struct fd_st));
   fd_obj->fd = allocate_fd();
@@ -232,7 +235,8 @@ filesize_handler(struct intr_frame *f)
 {
   int fd = get_word(f->esp + sizeof(void *));
   struct fd_st *fd_obj;
-  if (fd == -1 || (fd_obj = get_fd(fd)) == NULL)
+  // if (fd == -1 || (fd_obj = get_fd(fd)) == NULL)
+  if ((fd_obj = get_fd(fd)) == NULL)
   {
     f->eax = 0xffffffff;
     return;
@@ -247,13 +251,13 @@ read_handler(struct intr_frame *f)
   int fd = get_word(f->esp + sizeof(void *));
   int buffer = get_word(f->esp + sizeof(void *) * 2);
   int size = get_word(f->esp + sizeof(void *) * 3);
-  if (fd == -1 
-      || size == -1 
-      || buffer == -1
-      || fd == STDOUT_FILENO)
+  if (//fd == -1 
+      //|| size == -1 
+      //|| buffer == -1
+      fd == STDOUT_FILENO)
   {
     f->eax = 0xffffffff;
-    return; 
+    return;
   }
   
   if (fd == STDIN_FILENO) 
@@ -293,10 +297,10 @@ write_handler(struct intr_frame *f UNUSED)
   int fd = get_word(f->esp + sizeof(void *));
   int buffer = get_word(f->esp + sizeof(void *) * 2);
   int size = get_word(f->esp + sizeof(void *) * 3);
-  if (fd == -1 
-      || size == -1 
-      || buffer == -1
-      || fd == STDIN_FILENO)
+  if (//fd == -1 
+      //|| size == -1 
+      // || buffer == -1
+      fd == STDIN_FILENO)
   {
     f->eax = 0;
     return; 
@@ -344,11 +348,11 @@ create_handler(struct intr_frame *f)
 {
   int file_name = get_word(f->esp + sizeof(void *));
   int initial_size = get_word(f->esp + sizeof(void *) * 2);
-  if (file_name == -1 || initial_size == -1) 
-  {
-    f->eax = false;
-    return;
-  }
+  // if (file_name == -1 || initial_size == -1) 
+  // {
+  //   f->eax = false;
+  //   return;
+  // }
 
   f->eax = filesys_create ((const char *) file_name, initial_size);
 }
@@ -357,11 +361,11 @@ void
 remove_handler(struct intr_frame *f) 
 {
   int file_name = get_word(f->esp + sizeof(void *));
-  if (file_name == -1) 
-  {
-    f->eax = false;
-    return;
-  }
+  // if (file_name == -1) 
+  // {
+  //   f->eax = false;
+  //   return;
+  // }
   f->eax = filesys_remove ((const char *) file_name);
 }
 
@@ -371,7 +375,8 @@ seek_handler(struct intr_frame *f)
   int fd = get_word(f->esp + sizeof(void *));
   int new_pos = get_word(f->esp + sizeof(void *) * 2);
   struct fd_st *fd_obj;
-  if (fd == -1 || new_pos == -1 || (fd_obj = get_fd(fd)) == NULL)
+  if (// fd == -1 || new_pos == -1 ||
+  (fd_obj = get_fd(fd)) == NULL)
   {
     // TODO: ask Mark what to do here???
     return;
@@ -384,7 +389,8 @@ tell_handler(struct intr_frame *f)
 {
   int fd = get_word(f->esp + sizeof(void *));
   struct fd_st *fd_obj;
-  if (fd == -1 || (fd_obj = get_fd(fd)) == NULL)
+  if (// fd == -1 ||
+   (fd_obj = get_fd(fd)) == NULL)
   {
     return;
   }
@@ -396,7 +402,8 @@ close_handler(struct intr_frame *f)
 {
   int fd = get_word(f->esp + sizeof(void *));
   struct fd_st *fd_obj;
-  if (fd == -1 || (fd_obj = get_fd(fd)) == NULL)
+  if (// fd == -1 ||
+  (fd_obj = get_fd(fd)) == NULL)
   {
     return;
   }
@@ -435,4 +442,12 @@ get_fd (int fd)
   return NULL;
 }
 
-
+static
+void delete_thread (void) {
+  thread_current()->exit_status = -1;
+  if (thread_current()->nanny != NULL)
+  {
+   thread_current()->nanny->exit_status = -1;
+  }
+  thread_exit();
+}
