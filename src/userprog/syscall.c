@@ -7,6 +7,7 @@
 #include <syscall-nr.h>
 #include "threads/interrupt.h"
 #include "threads/thread.h"
+#include "threads/synch.h"
 #include "threads/vaddr.h"
 #include "threads/malloc.h"
 #include "devices/shutdown.h"
@@ -19,10 +20,10 @@ static int get_byte (const uint8_t *uaddr);
 static bool put_user (uint8_t *udst, uint8_t byte);
 static void put_byte (uint8_t *udst, uint8_t byte);
 static int allocate_fd (void);
-static void delete_thread (void);
 static struct fd_st *get_fd (int fd);
 
 /* struct to store child-parent relationship */
+static struct lock file_lock; 
 
 /* type of functions for sys call handlers */
 typedef intr_handler_func syscall_handler_func;
@@ -49,6 +50,7 @@ void
 syscall_init (void) 
 {
   intr_register_int (SYSCALL_INTR_NUM, 3, INTR_ON, syscall_handler, "syscall");
+  lock_init(&file_lock);
   
   /* intialising the handlers array with sys call structs */
   handlers[SYS_HALT] = &halt_handler;            
@@ -158,35 +160,32 @@ put_byte (uint8_t *udst, uint8_t byte)
       return;
     }
   }
-  delete_thread();
+  delete_thread(-1);
 }
 
 /* system call functions */
 void 
 halt_handler(struct intr_frame *f UNUSED) 
 {
-  printf("HALTING! \n");
+  printf("HALTING!\n");
   shutdown_power_off();
 }
 
 
 void 
 exec_handler(struct intr_frame *f) 
-{
+{ 
   int word = get_word(f->esp + sizeof(void *));
-  // if (word < 0)
-  // {
-  //   f->eax = 0xffffffff;
-  //   return;
-  // } 
+
+  // lock_acquire(&file_lock);
   f->eax = process_execute((char *) word);
+  // lock_release(&file_lock);
 }
 
 void
 exit_handler(struct intr_frame *f) 
 {
   intr_disable();
-  // printf("exiting %s\n", thread_current()->name);
   struct baby_sitter *bs = thread_current()->nanny;
   thread_current()->exit_status = get_word(f->esp + sizeof(void *));
   if (bs != NULL)
@@ -203,30 +202,45 @@ wait_handler(struct intr_frame *f)
   enum intr_level old_level;
   old_level = intr_disable();  // TODO: ask Mark???
   int child_pid = get_word(f->esp + sizeof(void *));
-  // printf("Thread %s waiting on pid %d\n", thread_current()->name, child_pid);
-  // if (child_pid == -1)
-  // {
-  //   f->eax = 0xffffffff;
-  //   return;
-  // }
   f->eax = process_wait(child_pid);
   intr_set_level(old_level);
 }
 
 void
 open_handler(struct intr_frame *f) 
-{
+{ 
+  
   int word = get_word(f->esp + sizeof(void *));
-  // if (word == -1) 
-  // {
-  //   f->eax = 0xffffffff;
-  //   return;
-  // }
-  // TODO SYNCHRONISATION
   struct fd_st *fd_obj = malloc(sizeof(struct fd_st));
+  
+  // lock_acquire(&file_lock);
   fd_obj->fd = allocate_fd();
+  if (!word)
+  { 
+    // lock_release(&file_lock);
+    free(fd_obj);
+    delete_thread(-1);
+  }
   fd_obj->file_pt = filesys_open((const char *)word);
+  if (!fd_obj->file_pt)
+  {
+    // lock_release(&file_lock);
+    free(fd_obj);
+    thread_current()->exit_status = 0;
+
+    enum intr_level old_level = intr_disable();
+    if (thread_current()->nanny != NULL)
+    {
+      thread_current()->nanny->exit_status = 0;
+    }
+    intr_set_level(old_level);
+
+    f->eax = -1;
+    return;
+  }
   list_push_back(&thread_current()->fds, &fd_obj->elem);
+  // lock_release(&file_lock);
+  
   f->eax = fd_obj->fd;
 }
 
@@ -348,12 +362,11 @@ create_handler(struct intr_frame *f)
 {
   int file_name = get_word(f->esp + sizeof(void *));
   int initial_size = get_word(f->esp + sizeof(void *) * 2);
-  // if (file_name == -1 || initial_size == -1) 
-  // {
-  //   f->eax = false;
-  //   return;
-  // }
-
+  
+  if (!file_name)
+  {
+    delete_thread(-1);
+  } 
   f->eax = filesys_create ((const char *) file_name, initial_size);
 }
 
@@ -361,11 +374,6 @@ void
 remove_handler(struct intr_frame *f) 
 {
   int file_name = get_word(f->esp + sizeof(void *));
-  // if (file_name == -1) 
-  // {
-  //   f->eax = false;
-  //   return;
-  // }
   f->eax = filesys_remove ((const char *) file_name);
 }
 
@@ -442,12 +450,14 @@ get_fd (int fd)
   return NULL;
 }
 
-static
-void delete_thread (void) {
-  thread_current()->exit_status = -1;
+/* sets exit status to 'exit_stat' for thread and then performs thread exit */
+void delete_thread (int exit_stat) {
+  thread_current()->exit_status = exit_stat;
+
+  intr_disable();
   if (thread_current()->nanny != NULL)
   {
-   thread_current()->nanny->exit_status = -1;
+   thread_current()->nanny->exit_status = exit_stat;
   }
   thread_exit();
 }

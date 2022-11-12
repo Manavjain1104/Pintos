@@ -33,12 +33,13 @@ process_execute (const char *file_name)
   char *fn_copy;
   tid_t tid;
 
-  // printf("process_execute %s", file_name);
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
-  fn_copy = palloc_get_page (0); 
+  fn_copy = palloc_get_page (0);
   if (fn_copy == NULL)
+  {
     return TID_ERROR;
+  }
   strlcpy (fn_copy, file_name, PGSIZE);
 
   /* extract out command name for the thread name */
@@ -46,9 +47,21 @@ process_execute (const char *file_name)
   strlcpy (name, file_name, PGSIZE);
   char *fakeptr;
 
-  /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create (strtok_r(name, " ", &fakeptr), 
-                        PRI_DEFAULT, start_process, fn_copy);
+  strtok_r(name, " ", &fakeptr);
+
+  /* check if valid command */
+  struct file* fp = filesys_open(name);
+  if (!fp)
+  {
+    tid = TID_ERROR;
+  }
+  else 
+  {
+    /* Create a new thread to execute FILE_NAME. */
+    tid = thread_create (name, PRI_DEFAULT, start_process, fn_copy);
+  }
+  file_close(fp);
+
   free(name);
 
   if (tid == TID_ERROR)
@@ -71,13 +84,15 @@ start_process (void *fn_copy)
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
-  success = load (file_name, &if_.eip, &if_.esp);
 
+  success = load (file_name, &if_.eip, &if_.esp);
+  ASSERT(success);
   /* If load failed, quit. */
   palloc_free_page (file_name);
   if (!success)
-    // printf("%s: exit(%d)\n", cur->name, cur->); 
+  {
     thread_exit ();
+  }
 
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
@@ -99,10 +114,7 @@ start_process (void *fn_copy)
 int
 process_wait (tid_t child_tid UNUSED) 
 {
-  // TODO: hash map worth is???, synchronisation??? --> interrupts
-
-  // enum intr_level old_level;
-  // old_level = 
+  // TODO:synchronisation??? --> interruptssss
   /* is it a valid child and has child terminated */
   struct list_elem *e;
   struct baby_sitter *bs;
@@ -267,7 +279,6 @@ load (char *file_name, void (**eip) (void), void **esp)
   file = filesys_open (strtok_r(file_name, " ", &saveptr));
   if (file == NULL) 
     {
-      printf ("load: %s: open failed\n", file_name);
       goto done; 
     }
 
@@ -497,8 +508,6 @@ setup_stack (void **esp, char *fn_copy, char *saveptr)
     {
       success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);
       *esp = PHYS_BASE;
-      // printf("INITIAL *ESP: %p\n", *esp);
-      // char* arg_arr[argc];
       if (success) {
         int argc = 1;
         char *pt;
@@ -524,10 +533,7 @@ setup_stack (void **esp, char *fn_copy, char *saveptr)
         int len = strlen(fn_copy) + 1;
         int len_args = len;
         *esp = *esp - len;
-        // printf("Before arg pt arr: %u, %p\n", *esp, *esp);
         arg_pt_arr[0] = *esp;
-        // printf("afer arg pt arr: %p\n", arg_pt_arr[0]);
-        // memcpy(arg_pt_arr, esp, sizeof(char *));
         strlcpy(*esp, fn_copy, len);
 
         /* set up arguments on the top of stack */
@@ -537,17 +543,13 @@ setup_stack (void **esp, char *fn_copy, char *saveptr)
           {
             continue;
           }
-          // printf("ARG:%s\n", arg);
           len = strlen(arg) + 1;
           *esp = *esp - len;
-          // printf("WHILE *ESP: %p\n", *esp);
           arg_pt_arr[i] = (char *) *esp;
           i++;
           len_args += len;
           strlcpy(*esp, arg, len);
-          // printf("Arg: %s\n", arg);
         }
-        // printf("argc: %d\n", argc);
 
         /* check that strtok_r got the right number of args */
         // printf("i = %d , argc: %d \n", i, argc);

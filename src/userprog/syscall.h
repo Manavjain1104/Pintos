@@ -15,5 +15,6 @@ struct fd_st {
 };
 
 void syscall_init (void);
+void delete_thread (int exit_stat);
 
 #endif /* userprog/syscall.h */
