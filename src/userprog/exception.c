@@ -88,7 +88,8 @@ kill (struct intr_frame *f)
       printf ("%s: dying due to interrupt %#04x (%s).\n",
               thread_name (), f->vec_no, intr_name (f->vec_no));
       intr_dump_frame (f);
-      thread_exit (); 
+      delete_thread(-1);
+      PANIC ("Could not delete thread in SEL_UCSEC");
 
     case SEL_KCSEG:
       /* Kernel's code segment, which indicates a kernel bug.
@@ -146,7 +147,6 @@ page_fault (struct intr_frame *f)
   not_present = (f->error_code & PF_P) == 0;
   write = (f->error_code & PF_W) != 0;
   user = (f->error_code & PF_U) != 0; 
-  
 
   /* handle page_faults gracefully for user invalid access. */
   if (thread_current()->in_sys_call) 
@@ -155,12 +155,13 @@ page_fault (struct intr_frame *f)
    f->eax = 0xffffffff;
    return;
   }
+
+   printf ("Page fault at %p: %s error %s page in %s context.\n",
+         fault_addr,
+         not_present ? "not present" : "rights violation",
+         write ? "writing" : "reading",
+         user ? "user" : "kernel");
    
-  printf ("Page fault at %p: %s error %s page in %s context.\n",
-          fault_addr,
-          not_present ? "not present" : "rights violation",
-          write ? "writing" : "reading",
-          user ? "user" : "kernel");
   kill (f);
 }
 

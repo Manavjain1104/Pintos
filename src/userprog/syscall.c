@@ -54,8 +54,6 @@ syscall_init (void)
   intr_register_int (SYSCALL_INTR_NUM, 3, INTR_ON, syscall_handler, "syscall");
 
   lock_init(&file_lock);
-
-  printf("GLOBAL LOCK LID : %d\n", file_lock.lid);
   
   /* intialising the handlers array with sys call structs */
   handlers[SYS_HALT] = &halt_handler;            
@@ -82,9 +80,7 @@ syscall_handler (struct intr_frame *f)
   /* verifying and reading value at esp */
   int sys_call_num = get_word(f->esp);
 
-  printf("sys call %d \n", sys_call_num);
-  
-  if (sys_call_num == - 1)
+  if (sys_call_num < 0)
   {
     delete_thread(-1);
   }
@@ -105,7 +101,6 @@ get_word (const uint8_t *uaddr)
   int byte;
   for (int i = (WORD_LENGTH - 1); i >= 0; i--) {
     byte = get_byte(uaddr + i);
-    // printf("byte: %x\n", ibyte);
     if (byte == -1) 
     {
       return -1;
@@ -328,12 +323,11 @@ write_handler(struct intr_frame *f UNUSED)
   int buffer = get_word(f->esp + sizeof(void *) * 2);
   int size = get_word(f->esp + sizeof(void *) * 3);
 
-  printf("%d %d %d \n", fd, buffer, size);
   if (fd <= STDIN_FILENO 
       || size < 0 
       || buffer == -1
       || !validate_buffer((const uint8_t *) buffer, size))
-  {
+  { 
     delete_thread(-1);
   }
   
@@ -342,7 +336,6 @@ write_handler(struct intr_frame *f UNUSED)
   for (int i = 0; i < size; i++)
   { 
     temp_buffer[i] = (uint8_t) get_byte((const uint8_t *)buffer + i);
-    // printf("temp_buffer[%d]: %u\n", i, temp_buffer[i]);
   }
   
   if (fd == STDOUT_FILENO) 
@@ -353,11 +346,11 @@ write_handler(struct intr_frame *f UNUSED)
       size_t actual_size = (size - i * STDOUT_MAX_BUFFER_SIZE) < STDOUT_MAX_BUFFER_SIZE 
       ? (size - i * STDOUT_MAX_BUFFER_SIZE)
       : STDOUT_MAX_BUFFER_SIZE; 
-      // printf("actual size: %d\n", actual_size);
       putbuf ((const char *) temp_buffer + i, actual_size);
-      // printf("put bye num: %d\n", i);
     }
+
     f->eax = size;
+    free(temp_buffer);
     return;
   }
 
@@ -366,6 +359,7 @@ write_handler(struct intr_frame *f UNUSED)
   if (fd_obj == NULL)
   {
     f->eax = 0;  // TODO: ask MARK is 0 or -1
+    free(temp_buffer);
     return;
   }
 
@@ -507,5 +501,5 @@ validate_buffer(const uint8_t * word, size_t size)
         return get_byte(word) != -1;
   }
 
-  return false;
+  return true;
 }
