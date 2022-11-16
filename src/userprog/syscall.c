@@ -54,6 +54,8 @@ syscall_init (void)
   intr_register_int (SYSCALL_INTR_NUM, 3, INTR_ON, syscall_handler, "syscall");
 
   lock_init(&file_lock);
+
+  printf("GLOBAL LOCK LID: %d\n", file_lock.lid);
   
   /* intialising the handlers array with sys call structs */
   handlers[SYS_HALT] = &halt_handler;            
@@ -223,19 +225,19 @@ open_handler(struct intr_frame *f)
   int word = get_word(f->esp + sizeof(void *));
   struct fd_st *fd_obj = malloc(sizeof(struct fd_st));
   
-  // lock_acquire(&file_lock);
+  lock_acquire(&file_lock);
   fd_obj->fd = allocate_fd();
   if (word == -1 
      || !validate_filename((const uint8_t *) word))
   { 
-    // lock_release(&file_lock);
+    lock_release(&file_lock);
     free(fd_obj);
     delete_thread(-1);
   }
   fd_obj->file_pt = filesys_open((const char *)word);
   if (!fd_obj->file_pt)
   {
-    // lock_release(&file_lock);
+    lock_release(&file_lock);
     free(fd_obj);
     thread_current()->exit_status = 0;
 
@@ -250,7 +252,7 @@ open_handler(struct intr_frame *f)
     return;
   }
   list_push_back(&thread_current()->fds, &fd_obj->elem);
-  // lock_release(&file_lock);
+  lock_release(&file_lock);
   
   f->eax = fd_obj->fd;
 }
@@ -260,14 +262,16 @@ filesize_handler(struct intr_frame *f)
 {
   int fd = get_word(f->esp + sizeof(void *));
   struct fd_st *fd_obj;
-  // if (fd == -1 || (fd_obj = get_fd(fd)) == NULL)
+
+  lock_acquire(&file_lock);
   if ((fd_obj = get_fd(fd)) == NULL)
   {
+    lock_release(&file_lock);
     f->eax = 0xffffffff;
     return;
   }
-
   f->eax = file_length(fd_obj->file_pt);
+  lock_release(&file_lock);
 }
 
 void
@@ -286,7 +290,7 @@ read_handler(struct intr_frame *f)
   }
   
   if (fd == STDIN_FILENO) 
-  {
+  { 
     for (int i = 0; i < size; i++)
     {
       put_byte((uint8_t *)buffer + i, input_getc());
@@ -296,16 +300,19 @@ read_handler(struct intr_frame *f)
   }
 
   /* create a fd object only when necessary */
+  lock_acquire(&file_lock);
   struct fd_st *fd_obj = get_fd(fd);
   if (fd_obj == NULL)
   {
     f->eax = 0xffffffff;
+    lock_release(&file_lock);
     return;
   }
 
   /* create a temporary buffer for reading using file struct */
   uint8_t *temp_buf = malloc(size * sizeof(uint8_t));
   int actual_read = file_read(fd_obj->file_pt, temp_buf, size);
+  lock_release(&file_lock);
 
   for (int i = 0; i < actual_read; i++)
   {
@@ -355,9 +362,11 @@ write_handler(struct intr_frame *f UNUSED)
   }
 
   /* create a fd object only when necessary */
+  lock_acquire(&file_lock);
   struct fd_st *fd_obj = get_fd(fd);
   if (fd_obj == NULL)
-  {
+  { 
+    lock_release(&file_lock);
     f->eax = 0;  // TODO: ask MARK is 0 or -1
     free(temp_buffer);
     return;
@@ -365,6 +374,8 @@ write_handler(struct intr_frame *f UNUSED)
 
   /* write out to file */
   f->eax = file_write(fd_obj->file_pt, temp_buffer, size);
+  lock_release(&file_lock);
+
   free(temp_buffer);
 }
 
@@ -380,14 +391,21 @@ create_handler(struct intr_frame *f)
   {
     delete_thread(-1);
   } 
+
+  // debug_backtrace_all();
+  lock_acquire(&file_lock);
   f->eax = filesys_create ((const char *) file_name, initial_size);
+  lock_release(&file_lock);
 }
 
 void
 remove_handler(struct intr_frame *f) 
 {
   int file_name = get_word(f->esp + sizeof(void *));
+
+  lock_acquire(&file_lock);
   f->eax = filesys_remove ((const char *) file_name);
+  lock_release(&file_lock);
 }
 
 void
@@ -396,13 +414,17 @@ seek_handler(struct intr_frame *f)
   int fd = get_word(f->esp + sizeof(void *));
   int new_pos = get_word(f->esp + sizeof(void *) * 2);
   struct fd_st *fd_obj;
-  if (// fd == -1 || new_pos == -1 ||
-  (fd_obj = get_fd(fd)) == NULL)
+  
+  lock_acquire(&file_lock);
+  if (fd == -1 
+      || new_pos == -1 
+      || (fd_obj = get_fd(fd)) == NULL)
   {
-    // TODO: ask Mark what to do here???
+    lock_release(&file_lock);
     return;
   }
   file_seek(fd_obj->file_pt, (unsigned) new_pos);
+  lock_release(&file_lock);
 }
 
 void
@@ -410,12 +432,16 @@ tell_handler(struct intr_frame *f)
 {
   int fd = get_word(f->esp + sizeof(void *));
   struct fd_st *fd_obj;
-  if (// fd == -1 ||
-   (fd_obj = get_fd(fd)) == NULL)
+
+  lock_acquire(&file_lock);
+  if (fd == -1 
+      || (fd_obj = get_fd(fd)) == NULL)
   {
+    lock_release(&file_lock);
     return;
   }
   f->eax = file_tell(fd_obj->file_pt);
+  lock_release(&file_lock);
 }
 
 void
@@ -423,12 +449,17 @@ close_handler(struct intr_frame *f)
 {
   int fd = get_word(f->esp + sizeof(void *));
   struct fd_st *fd_obj;
-  if (// fd == -1 ||
-  (fd_obj = get_fd(fd)) == NULL)
+
+  lock_acquire(&file_lock);
+  if (fd == -1 
+      || (fd_obj = get_fd(fd)) == NULL)
   {
+    lock_release(&file_lock);
     return;
   }
   file_close(fd_obj->file_pt);
+  lock_release(&file_lock);
+
   list_remove(&fd_obj->elem);
   free(fd_obj);
 }
