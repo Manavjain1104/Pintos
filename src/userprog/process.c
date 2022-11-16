@@ -7,6 +7,7 @@
 #include <string.h>
 #include "userprog/gdt.h"
 #include "userprog/pagedir.h"
+#include "userprog/syscall.h"
 #include "userprog/tss.h"
 #include "filesys/directory.h"
 #include "filesys/file.h"
@@ -41,7 +42,7 @@ process_execute (const char *file_name)
     return TID_ERROR;
   }
   strlcpy (fn_copy, file_name, PGSIZE);
-
+  
   /* extract out command name for the thread name */
   char *name = malloc(sizeof(char) * PGSIZE);
   strlcpy (name, file_name, PGSIZE);
@@ -49,23 +50,34 @@ process_execute (const char *file_name)
 
   strtok_r(name, " ", &fakeptr);
 
-  /* check if valid command */
-  struct file* fp = filesys_open(name);
-  if (!fp)
-  {
-    tid = TID_ERROR;
-  }
-  else 
-  {
-    /* Create a new thread to execute FILE_NAME. */
-    tid = thread_create (name, PRI_DEFAULT, start_process, fn_copy);
-  }
-  file_close(fp);
+  /* Create a new thread to execute FILE_NAME. */
+  tid = thread_create (name, PRI_DEFAULT, start_process, fn_copy);
 
   free(name);
 
-  if (tid == TID_ERROR)
+  if (tid == TID_ERROR) {
     palloc_free_page (fn_copy);
+    return TID_ERROR;
+  }
+    
+
+  struct list_elem *e;
+  for (e = list_begin(&thread_current()->baby_sitters); 
+       e != list_end(&thread_current()->baby_sitters);
+       e = list_next(e))
+  { 
+    struct baby_sitter *bs = list_entry(e, struct baby_sitter, elem); 
+    if (bs->child_tid == tid)
+    {
+      // printf("%s process exec down seama %p\n", thread_current()->name , &bs->start_process_sema);
+      sema_down (&bs->start_process_sema);
+      if (!bs->start_process_success) {
+        return TID_ERROR; 
+      }
+      break;
+    }
+  }
+
   return tid;
 }
 
@@ -86,13 +98,19 @@ start_process (void *fn_copy)
   if_.eflags = FLAG_IF | FLAG_MBS;
 
   success = load (file_name, &if_.eip, &if_.esp);
-  ASSERT(success);
+  thread_current()->nanny->start_process_success = success;
+
   /* If load failed, quit. */
+  enum intr_level old_level = intr_disable();
   palloc_free_page (file_name);
+  // printf("%s start process up seama %p\n", thread_current()->name , &thread_current()->nanny->start_process_sema);
+  sema_up (&thread_current()->nanny->start_process_sema);
   if (!success)
-  {
-    thread_exit ();
+  { 
+    printf("load: %s: open failed\n", thread_current()->name);
+    delete_thread(-1);
   }
+  intr_set_level(old_level);
 
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
@@ -127,12 +145,13 @@ process_wait (tid_t child_tid UNUSED)
     if (bs->child_tid == child_tid)
     {
       // it must be a valid child, parent should wait for it to exit
-      sema_down(bs->sema);
+      // printf("%s process wait : %p\n", thread_current()->name ,&bs->sema);
+      sema_down(&bs->sema);
 
       // now child has exited
       list_remove(&bs->elem);
       int exit_status = bs->exit_status;
-      free_baby_sitter(bs);
+      free(bs);
       return exit_status;
     }
   }
@@ -276,6 +295,7 @@ load (char *file_name, void (**eip) (void), void **esp)
   char *saveptr;
 
   /* Open executable file. */
+  lock_acquire(&file_lock);
   file = filesys_open (strtok_r(file_name, " ", &saveptr));
   if (file == NULL) 
     {
@@ -294,6 +314,8 @@ load (char *file_name, void (**eip) (void), void **esp)
       printf ("load: %s: error loading executable\n", file_name);
       goto done; 
     }
+
+  // we know exec 
 
   /* Read program headers. */
   file_ofs = ehdr.e_phoff;
@@ -370,6 +392,7 @@ load (char *file_name, void (**eip) (void), void **esp)
  done:
   /* We arrive here whether the load is successful or not. */
   file_close (file);
+  lock_release(&file_lock);
   return success;
 }
 
@@ -607,9 +630,4 @@ install_page (void *upage, void *kpage, bool writable)
      address, then map our page there. */
   return (pagedir_get_page (t->pagedir, upage) == NULL
           && pagedir_set_page (t->pagedir, upage, kpage, writable));
-}
-
-void free_baby_sitter(struct baby_sitter *bs) {
-  free(bs->sema);
-  free(bs);
 }

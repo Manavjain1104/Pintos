@@ -18,12 +18,14 @@ static int get_word (const uint8_t *uaddr);
 static int get_user (const uint8_t *uaddr);
 static int get_byte (const uint8_t *uaddr);
 static bool put_user (uint8_t *udst, uint8_t byte);
-static void put_byte (uint8_t *udst, uint8_t byte);
+static bool put_byte (uint8_t *udst, uint8_t byte);
 static int allocate_fd (void);
 static struct fd_st *get_fd (int fd);
+static bool validate_filename(const uint8_t * word);
+static bool validate_buffer(const uint8_t * word, size_t size);
 
 /* struct to store child-parent relationship */
-static struct lock file_lock; 
+struct lock file_lock; 
 
 /* type of functions for sys call handlers */
 typedef intr_handler_func syscall_handler_func;
@@ -50,7 +52,10 @@ void
 syscall_init (void) 
 {
   intr_register_int (SYSCALL_INTR_NUM, 3, INTR_ON, syscall_handler, "syscall");
+
   lock_init(&file_lock);
+
+  printf("GLOBAL LOCK LID : %d\n", file_lock.lid);
   
   /* intialising the handlers array with sys call structs */
   handlers[SYS_HALT] = &halt_handler;            
@@ -70,17 +75,23 @@ syscall_init (void)
 
 static void
 syscall_handler (struct intr_frame *f) 
-{
-  f->esp_dummy = 1;
+{ 
+  /* setting sys_cal flag */
+  thread_current()->in_sys_call = true;
+
   /* verifying and reading value at esp */
   int sys_call_num = get_word(f->esp);
 
-  // printf("sys_call_num: %d\n", sys_call_num);
-  handlers[sys_call_num] (f);
-  // printf("ended system call %d\n", sys_call_num);
+  printf("sys call %d \n", sys_call_num);
+  
+  if (sys_call_num == - 1)
+  {
+    delete_thread(-1);
+  }
 
-  f->esp_dummy = 0;
-  // TODO: ask mark file deny write to executable
+  handlers[sys_call_num] (f);
+
+  thread_current()->in_sys_call = false;
 }
 
 /* Reads a word at user virtual address UADDR.
@@ -149,18 +160,10 @@ put_user (uint8_t *udst, uint8_t byte)
 /* Writes BYTE to user address UDST.
   If fails to write at user address, sets exit status to -1 and thread exits.
   NOTE:- Does not trigger page_fault */
-static void
+static bool
 put_byte (uint8_t *udst, uint8_t byte)
 {
-  
-  if (is_user_vaddr(udst))
-  {
-    if (put_user(udst, byte))
-    {
-      return;
-    }
-  }
-  delete_thread(-1);
+  return is_user_vaddr(udst) && put_user(udst, byte);
 }
 
 /* system call functions */
@@ -174,12 +177,24 @@ halt_handler(struct intr_frame *f UNUSED)
 
 void 
 exec_handler(struct intr_frame *f) 
-{ 
+{    
   int word = get_word(f->esp + sizeof(void *));
 
-  // lock_acquire(&file_lock);
-  f->eax = process_execute((char *) word);
-  // lock_release(&file_lock);
+  if (word == -1 || !validate_filename((const uint8_t *) word))
+  {
+    // problem with the data provided
+    f->eax = 0xffffffff;
+    return;
+  }
+  int tid = process_execute((const char *) word);
+  f->eax = tid;
+  if (tid == -1)
+  {
+    if (thread_current()->nanny != NULL)
+    {
+      sema_up(&thread_current()->nanny->sema);
+    }
+  }
 }
 
 void
@@ -215,7 +230,8 @@ open_handler(struct intr_frame *f)
   
   // lock_acquire(&file_lock);
   fd_obj->fd = allocate_fd();
-  if (!word)
+  if (word == -1 
+     || !validate_filename((const uint8_t *) word))
   { 
     // lock_release(&file_lock);
     free(fd_obj);
@@ -265,13 +281,13 @@ read_handler(struct intr_frame *f)
   int fd = get_word(f->esp + sizeof(void *));
   int buffer = get_word(f->esp + sizeof(void *) * 2);
   int size = get_word(f->esp + sizeof(void *) * 3);
-  if (//fd == -1 
-      //|| size == -1 
-      //|| buffer == -1
-      fd == STDOUT_FILENO)
+  if (fd == -1 
+      || size < 0  
+      || buffer == -1
+      || fd == STDOUT_FILENO
+      || !validate_buffer((const uint8_t *) buffer, size))
   {
-    f->eax = 0xffffffff;
-    return;
+    delete_thread(-1);
   }
   
   if (fd == STDIN_FILENO) 
@@ -307,17 +323,18 @@ read_handler(struct intr_frame *f)
 
 void
 write_handler(struct intr_frame *f UNUSED) 
-{
+{ 
   int fd = get_word(f->esp + sizeof(void *));
   int buffer = get_word(f->esp + sizeof(void *) * 2);
   int size = get_word(f->esp + sizeof(void *) * 3);
-  if (//fd == -1 
-      //|| size == -1 
-      // || buffer == -1
-      fd == STDIN_FILENO)
+
+  printf("%d %d %d \n", fd, buffer, size);
+  if (fd <= STDIN_FILENO 
+      || size < 0 
+      || buffer == -1
+      || !validate_buffer((const uint8_t *) buffer, size))
   {
-    f->eax = 0;
-    return; 
+    delete_thread(-1);
   }
   
   /* writing from user mem buffer to temp buffer */
@@ -363,7 +380,9 @@ create_handler(struct intr_frame *f)
   int file_name = get_word(f->esp + sizeof(void *));
   int initial_size = get_word(f->esp + sizeof(void *) * 2);
   
-  if (!file_name)
+  if (file_name == -1 
+      || initial_size == -1 
+      || !validate_filename((const uint8_t *) file_name))
   {
     delete_thread(-1);
   } 
@@ -460,4 +479,33 @@ void delete_thread (int exit_stat) {
    thread_current()->nanny->exit_status = exit_stat;
   }
   thread_exit();
+}
+
+static bool
+validate_filename(const uint8_t * word)
+{
+  /* check uptill 14 characters for valid file_name */
+  int i = 0;
+  int byte = get_byte(word + i);
+  while (i < MAX_FILE_NAME_SIZE 
+         && byte != -1
+         && (char) byte != ' ' 
+         && (char) byte != '\0')
+  {   
+    i++;
+    byte = get_byte((const uint8_t *) word + i);
+  }
+
+  return byte != -1;
+}
+
+static bool
+validate_buffer(const uint8_t * word, size_t size)
+{
+  if (((unsigned) word - size) > USER_STACK_LOWER_BOUND
+      || (unsigned) word < USER_STACK_LOWER_BOUND) {
+        return get_byte(word) != -1;
+  }
+
+  return false;
 }

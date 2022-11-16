@@ -251,8 +251,8 @@ thread_create (const char *name, int priority,
   /* establishing a baby sitter for THREAD 't' in the parent */
   struct baby_sitter *bs 
     = (struct baby_sitter *) malloc(sizeof(struct baby_sitter));
-  bs->sema = malloc(sizeof(struct semaphore));
-  sema_init(bs->sema, 0);
+  sema_init(&bs->sema, 0);
+  sema_init(&bs->start_process_sema, 0);
   bs->exit_status = 0;
   bs->child = t;
   bs->child_tid = tid;
@@ -373,6 +373,8 @@ thread_exit (void)
     temp = e;
     e = list_next(e);
     list_remove(temp);
+    // printf("thread_exit lock release\n");
+    // printf("%s is trying to remove lock lid %d\n", t->name, list_entry(e, struct lock, elem)->lid);
     lock_release(list_entry(e, struct lock, elem));
   }
 
@@ -380,15 +382,16 @@ thread_exit (void)
   ls = &t->baby_sitters;
   struct baby_sitter *bs;
   for (e = list_begin(ls);
-       e != list_end(ls);
-       e = list_next(e))
-  {
-    bs = list_entry(e, struct baby_sitter, elem);
+       e != list_end(ls);)
+  { 
+    temp = e;
+    e = list_next(e);
+    bs = list_entry(temp, struct baby_sitter, elem);
     if (bs->child != NULL)
     {
       bs->child->nanny = NULL;
     }
-    free_baby_sitter(bs);
+    free(bs);
   }
 
   if (t->nanny != NULL)
@@ -396,9 +399,10 @@ thread_exit (void)
     // means parent has not exited, so we need to sema up 
     // the baby_sitter the sema inside
     t->nanny->child = NULL;
-    sema_up(t->nanny->sema);
+    // printf("thread exit %s sema up : %p\n", t->name ,&t->nanny->sema);
+    sema_up(&t->nanny->sema);
   }
-
+    
   /* free fd objects held by the current thread */
   ls = &t->fds;
   for (e = list_begin(ls);
@@ -717,10 +721,11 @@ init_thread (struct thread *t, const char *name, int priority)
   list_init(&t->donations);
   t->donee = NULL;
   list_init(&t->locks_downed);
+
+  /* user prog initialisation */
   t->exit_status = 0;
   list_init (&t->baby_sitters);
   list_init (&t->fds);
-
 
   if (thread_mlfqs) {
     if (t != initial_thread)

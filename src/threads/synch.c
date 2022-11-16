@@ -274,9 +274,14 @@ lock_try_acquire (struct lock *lock)
 void
 lock_release (struct lock *lock) 
 {
+  enum intr_level old_level;   // Note: interrupts disabled to avoid
+  old_level = intr_disable();  // synchronisation issues
   ASSERT (lock != NULL);
+  // printf("Name of current thread lock_release: %s\n", thread_current()->name);
+  // printf("Current lock held by thread: %s\n", lock->holder->name);
   ASSERT (lock_held_by_current_thread (lock));
-
+  // enum intr_level old_level;   // Note: interrupts disabled to avoid
+  // old_level = intr_disable();  // synchronisation issues
   if (!thread_mlfqs) {
     /* release donors waiting inside the semaphore */
     struct thread *cur = thread_current();
@@ -300,8 +305,7 @@ lock_release (struct lock *lock)
     // here we remove the donor elems from 
     // the current threads donations and vice-versa
 
-    enum intr_level old_level;   // Note: interrupts disabled to avoid
-    old_level = intr_disable();  // synchronisation issues
+
     for (int i = 0; i < index; i++) {
       struct list_elem *e = elem_to_remove[i];
       struct thread *donor = list_entry (e, struct thread, don_elem);
@@ -311,7 +315,7 @@ lock_release (struct lock *lock)
       donor->donee = NULL;
     }
 
-    intr_set_level(old_level);
+    // intr_set_level(old_level);
 
     // remove the lock as a possible future donor provider
     struct list_elem *f;
@@ -322,7 +326,7 @@ lock_release (struct lock *lock)
             break;
           }
     }
-    
+    intr_set_level(old_level);
     //re-calculate priority of current thread
     calculate_priority(cur);
   }

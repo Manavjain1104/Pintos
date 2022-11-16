@@ -126,6 +126,9 @@ struct thread
 
     /* exit status stored for process termination message */
     int exit_status;
+
+    /* flag to see if current thread is in sys call */
+    bool in_sys_call;
 // #endif
 
     /* Owned by thread.c. */
