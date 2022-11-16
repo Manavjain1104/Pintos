@@ -15,6 +15,7 @@
 // #ifdef USERPROG
 #include "userprog/process.h"
 #include "userprog/syscall.h"
+#include "filesys/file.h"
 // #endif
 
 /* Random value for struct thread's `magic' member.
@@ -412,6 +413,13 @@ thread_exit (void)
     e = list_next(e);
     free(list_entry(temp, struct fd_st, elem));
   }
+
+  lock_acquire(&file_lock);
+  if (t->exec_file) {
+    file_allow_write(t->exec_file);
+    file_close(t->exec_file);
+  }
+  lock_release(&file_lock);
 
   printf ("%s: exit(%d)\n", t->name, t->exit_status);
 

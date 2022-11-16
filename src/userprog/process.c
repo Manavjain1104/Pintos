@@ -315,8 +315,9 @@ load (char *file_name, void (**eip) (void), void **esp)
       goto done; 
     }
 
-  // we know exec 
-
+  t->exec_file = filesys_open(file_name);
+  file_deny_write(t->exec_file);
+  
   /* Read program headers. */
   file_ofs = ehdr.e_phoff;
   for (i = 0; i < ehdr.e_phnum; i++) 

@@ -6,6 +6,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include "fixed-point.h"
+#include "filesys/file.h"
 #include "devices/timer.h"
 
 /* States in a thread's life cycle. */
@@ -129,6 +130,9 @@ struct thread
 
     /* flag to see if current thread is in sys call */
     bool in_sys_call;
+
+    /* executable file to keep track of which file to deny writes to */
+    struct file *exec_file; 
 // #endif
 
     /* Owned by thread.c. */
