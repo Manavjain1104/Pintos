@@ -132,7 +132,7 @@ start_process (void *fn_copy)
 int
 process_wait (tid_t child_tid UNUSED) 
 {
-  // TODO:synchronisation??? --> interruptssss
+  // TODO:synchronisation??? --> interrupts
   /* is it a valid child and has child terminated */
   struct list_elem *e;
   struct baby_sitter *bs;
