@@ -531,16 +531,21 @@ setup_stack (void **esp, char *fn_copy, char *saveptr)
   if (kpage != NULL) 
     {
       success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);
+
+      // printf("fncpy: %s\n", fn_copy);
+
       *esp = PHYS_BASE;
       if (success) {
         int argc = 1;
         char *pt;
         bool prevspace = false;
         for (pt = saveptr; *pt != '\0'; pt++) {
+          //printf("char %c\n", *pt);
           if (*pt == ' ')
           {
             if (!prevspace)
-            {
+            { 
+              // printf("GNG UP!\n");
               argc++;
             }
             prevspace = true;
@@ -548,8 +553,13 @@ setup_stack (void **esp, char *fn_copy, char *saveptr)
             prevspace = false;
           }
         }
+        if (prevspace)
+        {
+          argc--;
+        }
         if (pt > saveptr)
         {
+          // printf("GNG UP 2!\n");
           argc++;
         }
         char *arg_pt_arr[argc];
@@ -577,7 +587,7 @@ setup_stack (void **esp, char *fn_copy, char *saveptr)
 
         /* check that strtok_r got the right number of args */
         // printf("i = %d , argc: %d \n", i, argc);
-        ASSERT(i == argc);
+        ASSERT(argc == i); // ASSERT (life does not make sense)
 
         /* word_align the top arguments and set argv[argc] to null */
         int len_align = 0;

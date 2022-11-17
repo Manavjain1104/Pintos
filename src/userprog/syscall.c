@@ -367,7 +367,7 @@ write_handler(struct intr_frame *f UNUSED)
   if (fd_obj == NULL)
   { 
     lock_release(&file_lock);
-    f->eax = 0;  // TODO: ask MARK is 0 or -1
+    f->eax = 0;
     free(temp_buffer);
     return;
   }
