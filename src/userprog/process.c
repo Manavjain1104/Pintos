@@ -31,7 +31,7 @@ static bool load (char *cmdline, void (**eip) (void), void **esp);
 tid_t
 process_execute (const char *file_name) 
 {
-  char *fn_copy;
+  char *fn_copy, *name;
   tid_t tid;
 
   /* Make a copy of FILE_NAME.
@@ -44,7 +44,13 @@ process_execute (const char *file_name)
   strlcpy (fn_copy, file_name, PGSIZE);
   
   /* extract out command name for the thread name */
-  char *name = malloc(sizeof(char) * PGSIZE);
+  name = palloc_get_page (0);
+  if (name == NULL)
+  {
+    palloc_free_page(fn_copy);
+    return TID_ERROR;
+  }
+
   strlcpy (name, file_name, PGSIZE);
   char *fakeptr;
 
@@ -53,7 +59,7 @@ process_execute (const char *file_name)
   /* Create a new thread to execute FILE_NAME. */
   tid = thread_create (name, PRI_DEFAULT, start_process, fn_copy);
 
-  free(name);
+  palloc_free_page(name);
 
   if (tid == TID_ERROR) {
     palloc_free_page (fn_copy);
@@ -69,15 +75,15 @@ process_execute (const char *file_name)
     struct baby_sitter *bs = list_entry(e, struct baby_sitter, elem); 
     if (bs->child_tid == tid)
     {
-      // printf("%s process exec down seama %p\n", thread_current()->name , &bs->start_process_sema);
       sema_down (&bs->start_process_sema);
       if (!bs->start_process_success) {
+        // palloc_free_page (fn_copy);
         return TID_ERROR; 
       }
       break;
     }
   }
-
+  // palloc_free_page(fn_copy);
   return tid;
 }
 
@@ -103,7 +109,6 @@ start_process (void *fn_copy)
   /* If load failed, quit. */
   enum intr_level old_level = intr_disable();
   palloc_free_page (file_name);
-  // printf("%s start process up seama %p\n", thread_current()->name , &thread_current()->nanny->start_process_sema);
   sema_up (&thread_current()->nanny->start_process_sema);
   if (!success)
   { 
@@ -151,7 +156,7 @@ process_wait (tid_t child_tid UNUSED)
       // now child has exited
       list_remove(&bs->elem);
       int exit_status = bs->exit_status;
-      free(bs);
+      free(bs);                                                 
       return exit_status;
     }
   }
