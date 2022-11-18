@@ -188,7 +188,8 @@ exec_handler(struct intr_frame *f)
   if (tid == -1)
   {
     if (thread_current()->nanny != NULL)
-    {
+    { 
+      thread_current()->nanny->exit_status = -1;
       sema_up(&thread_current()->nanny->sema);
     }
   }
