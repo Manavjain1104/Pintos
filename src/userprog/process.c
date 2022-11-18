@@ -61,7 +61,8 @@ process_execute (const char *file_name)
 
   palloc_free_page(name);
 
-  if (tid == TID_ERROR) {
+  if (tid == TID_ERROR) 
+  {
     palloc_free_page (fn_copy);
     return TID_ERROR;
   }
@@ -133,8 +134,6 @@ start_process (void *fn_copy)
 int
 process_wait (tid_t child_tid UNUSED) 
 {
-  // TODO:synchronisation??? --> interrupts
-  /* is it a valid child and has child terminated */
   struct list_elem *e;
   struct baby_sitter *bs;
   struct list *bss = &thread_current()->baby_sitters;
@@ -145,18 +144,18 @@ process_wait (tid_t child_tid UNUSED)
     bs = list_entry(e, struct baby_sitter, elem);
     if (bs->child_tid == child_tid)
     {
-      // it must be a valid child, parent should wait for it to exit
-      // printf("%s process wait : %p\n", thread_current()->name ,&bs->sema);
+      /* It must be a valid child, parent should wait for it to exit*/
       sema_down(&bs->sema);
 
-      // now child has exited
+      /* Now child has exited*/ 
       list_remove(&bs->elem);
       int exit_status = bs->exit_status;
       free(bs);                                                 
       return exit_status;
     }
   }
-  return -1; // did not find valid child
+  /* Did not find valid child*/ 
+  return -1; 
 }
 
 /* Free the current process's resources. */
@@ -182,9 +181,6 @@ process_exit (void)
       pagedir_activate (NULL);
       pagedir_destroy (pd);
     }
-  
-  /* print the process termination message */  // TODO
-  // printf("%s: exit(%d)\n", cur->name, );
 }
 
 /* Sets up the CPU for running user code in the current
@@ -292,7 +288,7 @@ load (char *file_name, void (**eip) (void), void **esp)
     goto done;
   process_activate ();
 
-  /* parsing the file name from the fn_copy */
+  /* Parsing the file name from the fn_copy */
   char *saveptr;
 
   /* Open executable file. */
@@ -327,11 +323,15 @@ load (char *file_name, void (**eip) (void), void **esp)
       struct Elf32_Phdr phdr;
 
       if (file_ofs < 0 || file_ofs > file_length (file))
-        goto done;
+        {
+          goto done;
+        }
       file_seek (file, file_ofs);
 
       if (file_read (file, &phdr, sizeof phdr) != sizeof phdr)
-        goto done;
+        {
+          goto done;
+        }
       file_ofs += sizeof phdr;
       switch (phdr.p_type) 
         {
@@ -382,10 +382,6 @@ load (char *file_name, void (**eip) (void), void **esp)
   /* Set up stack. */
   if (!setup_stack (esp, file_name, saveptr))
     goto done;
-  
-  /* test stack */
-  // hex_dump(*esp, *esp, PHYS_BASE - *esp, true);
-  // printf("finished hex dump\n");
 
   /* Start address. */
   *eip = (void (*) (void)) ehdr.e_entry;
@@ -537,7 +533,7 @@ setup_stack (void **esp, char *fn_copy, char *saveptr)
       *esp = PHYS_BASE;
       if (success) {
 
-        /* total bytes required for stack setup */
+        /* Total bytes required for stack setup */
         unsigned total_bytes = strlen(fn_copy) + 1;
 
         int argc = 1;
@@ -567,9 +563,10 @@ setup_stack (void **esp, char *fn_copy, char *saveptr)
           total_bytes++;
         }
 
-        /* word_align the top arguments and set argv[argc] to null */
+        /* Word_align the top arguments and set argv[argc] to null */
         int len_align = 0;
-        if ((total_bytes % WORD_LENGTH) > 0) {
+        if ((total_bytes % WORD_LENGTH) > 0) 
+        {
           len_align = WORD_LENGTH - (total_bytes % WORD_LENGTH);
         }
 
@@ -580,12 +577,13 @@ setup_stack (void **esp, char *fn_copy, char *saveptr)
                        + sizeof(void *);
 
         /* Pre-checking for overflow in user stack */
-        if (PGSIZE - sizeof(struct thread) < total_bytes) {
+        if (PGSIZE - sizeof(struct thread) < total_bytes) 
+        {
           palloc_free_page(kpage);
           return false;
         }
 
-        /* start updating user stack */
+        /* Start updating user stack */
         char *arg_pt_arr[argc];
         char *arg;
         int len = strlen(fn_copy) + 1;
@@ -595,7 +593,8 @@ setup_stack (void **esp, char *fn_copy, char *saveptr)
 
         /* set up arguments on the top of stack */
         int i = 1;
-        while ((arg = strtok_r(NULL, " ", &saveptr))) {
+        while ((arg = strtok_r(NULL, " ", &saveptr))) 
+        {
           if (strlen(arg) == 0)
           {
             continue;
@@ -607,31 +606,25 @@ setup_stack (void **esp, char *fn_copy, char *saveptr)
           strlcpy(*esp, arg, len);
         }
 
-        /* check that strtok_r got the right number of args */
-        // printf("i = %d , argc: %d \n", i, argc);
-        ASSERT(argc == i); // ASSERT (life does not make sense) 
-        
-        // printf("len align is %d\n" ,len_align);
+        /* Check that strtok_r got the right number of args */
+
+        ASSERT(argc == i); 
         *esp = *esp - len_align - sizeof(char *);
-        // printf("LEN ALIGN STAGE *ESP: %p\n", *esp);
+
   
-        /* set up the pointer to arguments */
-        for (i = argc - 1; i >= 0; i--) {
+        /* Set up the pointer to arguments */
+        for (i = argc - 1; i >= 0; i--) 
+        {
           *esp = *esp - sizeof(char *);
-          // printf("ARGC PUT *ESP: %p\n", *esp);
-          // *esp = arg_pt_arr[i];
           memcpy(*esp, &arg_pt_arr[i], sizeof(char *));
         }
 
-        /* set up argv and argc on the stack */
-        // *(*esp - sizeof(char *) = *esp;
+        /* Set up argv and argc on the stack */
         memcpy((*esp - sizeof(char *)), esp, sizeof(char *));
         *esp = *esp - sizeof(char *) - sizeof(int);
-        // printf("ARGV *ESP: %p\n", *esp);
         memcpy(*esp, &argc, sizeof(int));
-        /* set up fake return address */
+        /* Set up fake return address */
         *esp = *esp - sizeof(void *);
-        // printf("FINAL *ESP: %p\n", *esp);
       }
       else
         palloc_free_page (kpage);

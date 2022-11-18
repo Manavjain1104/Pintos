@@ -148,7 +148,7 @@ page_fault (struct intr_frame *f)
   write = (f->error_code & PF_W) != 0;
   user = (f->error_code & PF_U) != 0; 
 
-  /* handle page_faults gracefully for user invalid access. */
+  /* Handle page_faults gracefully for user invalid access. */
   if (thread_current()->in_sys_call) 
   {
    f->eip = (void *) f->eax;
