@@ -393,7 +393,6 @@ create_handler(struct intr_frame *f)
     delete_thread(-1);
   } 
 
-  // Debug_backtrace_all();
   lock_acquire(&file_lock);
   f->eax = filesys_create ((const char *) file_name, initial_size);
   lock_release(&file_lock);
