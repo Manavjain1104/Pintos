@@ -76,14 +76,13 @@ process_execute (const char *file_name)
     if (bs->child_tid == tid)
     {
       sema_down (&bs->start_process_sema);
-      if (!bs->start_process_success) {
-        // palloc_free_page (fn_copy);
+      if (!bs->start_process_success) 
+      {
         return TID_ERROR; 
       }
       break;
     }
   }
-  // palloc_free_page(fn_copy);
   return tid;
 }
 
@@ -92,8 +91,6 @@ process_execute (const char *file_name)
 static void
 start_process (void *fn_copy)
 { 
-  
-  char *file_name = fn_copy;
   struct intr_frame if_;
   bool success;
 
@@ -103,16 +100,15 @@ start_process (void *fn_copy)
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
 
-  success = load (file_name, &if_.eip, &if_.esp);
+  success = load (fn_copy, &if_.eip, &if_.esp);
   thread_current()->nanny->start_process_success = success;
 
   /* If load failed, quit. */
   enum intr_level old_level = intr_disable();
-  palloc_free_page (file_name);
+  palloc_free_page (fn_copy);
   sema_up (&thread_current()->nanny->start_process_sema);
   if (!success)
   { 
-    printf("load: %s: open failed\n", thread_current()->name);
     delete_thread(-1);
   }
   intr_set_level(old_level);
@@ -304,6 +300,7 @@ load (char *file_name, void (**eip) (void), void **esp)
   file = filesys_open (strtok_r(file_name, " ", &saveptr));
   if (file == NULL) 
     {
+      printf("load: %s: open failed\n", thread_current()->name);
       goto done; 
     }
 

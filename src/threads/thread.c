@@ -374,8 +374,6 @@ thread_exit (void)
     temp = e;
     e = list_next(e);
     list_remove(temp);
-    // printf("thread_exit lock release\n");
-    // printf("%s is trying to remove lock lid %d\n", t->name, list_entry(e, struct lock, elem)->lid);
     lock_release(list_entry(e, struct lock, elem));
   }
 
@@ -405,22 +403,24 @@ thread_exit (void)
   }
     
   /* free fd objects held by the current thread */
+  lock_acquire(&file_lock);
   ls = &t->fds;
   for (e = list_begin(ls);
        e != list_end(ls);)
   {   
     temp = e;
     e = list_next(e);
-    free(list_entry(temp, struct fd_st, elem));
+    struct fd_st *fd_obj = list_entry(temp, struct fd_st, elem);
+    file_close(fd_obj->file_pt);
+    free(fd_obj);
   }
 
-  lock_acquire(&file_lock);
+  // lock_acquire(&file_lock);
   if (t->exec_file) {
     file_allow_write(t->exec_file);
     file_close(t->exec_file);
   }
   lock_release(&file_lock);
-
   printf ("%s: exit(%d)\n", t->name, t->exit_status);
 
   t->status = THREAD_DYING;

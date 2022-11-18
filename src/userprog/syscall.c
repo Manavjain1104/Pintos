@@ -185,18 +185,6 @@ exec_handler(struct intr_frame *f)
   }
   int tid = process_execute((const char *) word);
   f->eax = tid;
-  // if (tid == -1)
-  // {
-  //   if (thread_current()->nanny != NULL)
-  //   { 
-  //     // thread_current()->nanny->exit_status = -1;
-  //     enum intr_level old_level = intr_disable();
-  //     // sema_up(&thread_current()->nanny->sema);
-  //     delete_thread(-1);
-  //     intr_set_level(old_level);
-  //   }
-
-  // }
 }
 
 void
