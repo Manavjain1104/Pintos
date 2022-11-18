@@ -532,25 +532,27 @@ setup_stack (void **esp, char *fn_copy, char *saveptr)
     {
       success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);
 
-      // printf("fncpy: %s\n", fn_copy);
-
       *esp = PHYS_BASE;
       if (success) {
+
+        /* total bytes required for stack setup */
+        unsigned total_bytes = strlen(fn_copy) + 1;
+
         int argc = 1;
         char *pt;
         bool prevspace = false;
         for (pt = saveptr; *pt != '\0'; pt++) {
-          //printf("char %c\n", *pt);
           if (*pt == ' ')
           {
             if (!prevspace)
             { 
-              // printf("GNG UP!\n");
               argc++;
+              total_bytes++;
             }
             prevspace = true;
           } else {
             prevspace = false;
+            total_bytes++;
           }
         }
         if (prevspace)
@@ -559,13 +561,32 @@ setup_stack (void **esp, char *fn_copy, char *saveptr)
         }
         if (pt > saveptr)
         {
-          // printf("GNG UP 2!\n");
           argc++;
+          total_bytes++;
         }
+
+        /* word_align the top arguments and set argv[argc] to null */
+        int len_align = 0;
+        if ((total_bytes % WORD_LENGTH) > 0) {
+          len_align = WORD_LENGTH - (total_bytes % WORD_LENGTH);
+        }
+
+        total_bytes += len_align 
+                       + (argc + 1) * sizeof(char *) 
+                       + sizeof(char **) 
+                       + sizeof(int) 
+                       + sizeof(void *);
+
+        /* Pre-checking for overflow in user stack */
+        if (PGSIZE - sizeof(struct thread) < total_bytes) {
+          palloc_free_page(kpage);
+          return false;
+        }
+
+        /* start updating user stack */
         char *arg_pt_arr[argc];
         char *arg;
         int len = strlen(fn_copy) + 1;
-        int len_args = len;
         *esp = *esp - len;
         arg_pt_arr[0] = *esp;
         strlcpy(*esp, fn_copy, len);
@@ -581,19 +602,12 @@ setup_stack (void **esp, char *fn_copy, char *saveptr)
           *esp = *esp - len;
           arg_pt_arr[i] = (char *) *esp;
           i++;
-          len_args += len;
           strlcpy(*esp, arg, len);
         }
 
         /* check that strtok_r got the right number of args */
         // printf("i = %d , argc: %d \n", i, argc);
-        ASSERT(argc == i); // ASSERT (life does not make sense)
-
-        /* word_align the top arguments and set argv[argc] to null */
-        int len_align = 0;
-        if ((len_args % WORD_LENGTH) > 0) {
-          len_align = WORD_LENGTH - (len_args % WORD_LENGTH);
-        }
+        ASSERT(argc == i); // ASSERT (life does not make sense) 
         
         // printf("len align is %d\n" ,len_align);
         *esp = *esp - len_align - sizeof(char *);
