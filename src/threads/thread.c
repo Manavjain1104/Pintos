@@ -12,11 +12,11 @@
 #include "threads/switch.h"
 #include "threads/synch.h"
 #include "threads/vaddr.h"
-// #ifdef USERPROG
+#ifdef USERPROG
 #include "userprog/process.h"
 #include "userprog/syscall.h"
 #include "filesys/file.h"
-// #endif
+#endif
 
 /* Random value for struct thread's `magic' member.
    Used to detect stack overflow.  See the big comment at the top
@@ -142,17 +142,24 @@ thread_tick (void) {
 
   /* Update statistics. */
   if (t == idle_thread)
+  {
     idle_ticks++;
+  }
+    
 #ifdef USERPROG
   else if (t->pagedir != NULL)
+  {
     user_ticks++;
+  }
 #endif
   else
+  {
     kernel_ticks++;
-
+  }
+    
   if (thread_mlfqs) 
   {
-    // Increments Recent CPU usage when not in the idle thread
+    /*Increments Recent CPU usage when not in the idle thread*/ 
     if (thread_current() != idle_thread) 
     {
       thread_current () -> recent_cpu_usage = 
@@ -160,14 +167,14 @@ thread_tick (void) {
     }
     int ticks = timer_ticks();
 
-    // Condition to calculate priority and load average every second
+    /*Condition to calculate priority and load average every second*/ 
     if ((ticks % TIMER_FREQ) == 0) 
     {
         thread_load_avg_calc ();
         thread_recent_cpu_calc_all();
     }
 
-    // Check every 4th tick
+    /*Check every 4th tick*/ 
     if ((ticks % TIME_SLICE) == 0) 
     {
       thread_priority_calc_all ();
@@ -248,8 +255,8 @@ thread_create (const char *name, int priority,
   sf->ebp = 0;
 
 
-  // #ifdef USERPROG
-  /* establishing a baby sitter for THREAD 't' in the parent */
+  #ifdef USERPROG
+  /* Establishing a baby sitter for THREAD 't' in the parent */
   struct baby_sitter *bs 
     = (struct baby_sitter *) malloc(sizeof(struct baby_sitter));
   sema_init(&bs->sema, 0);
@@ -259,7 +266,7 @@ thread_create (const char *name, int priority,
   bs->child_tid = tid;
   t->nanny = bs;
   list_push_back(&thread_current()->baby_sitters, &bs->elem);
-  // #endif
+  #endif
 
   intr_set_level (old_level);
 
@@ -364,7 +371,7 @@ thread_exit (void)
   struct thread *t = thread_current();
   list_remove (&t->allelem);
 
-  /* release all locks that the exiting thread holds */
+  /* Release all locks that the exiting thread holds */
   struct list_elem *e;
   struct list_elem *temp;
   struct list *ls = &t->locks_downed;
@@ -377,7 +384,7 @@ thread_exit (void)
     lock_release(list_entry(e, struct lock, elem));
   }
 
-  /* fix parent and child referecences of baby_sitters */
+  /* Fix parent and child referecences of baby_sitters */
   ls = &t->baby_sitters;
   struct baby_sitter *bs;
   for (e = list_begin(ls);
@@ -395,14 +402,13 @@ thread_exit (void)
 
   if (t->nanny != NULL)
   {
-    // means parent has not exited, so we need to sema up 
-    // the baby_sitter the sema inside
+    /* Means parent has not exited, so we need to sema up 
+       the baby_sitter the sema inside */
     t->nanny->child = NULL;
-    // printf("thread exit %s sema up : %p\n", t->name ,&t->nanny->sema);
     sema_up(&t->nanny->sema);
   }
     
-  /* free fd objects held by the current thread */
+  /* Free fd objects held by the current thread */
   lock_acquire(&file_lock);
   ls = &t->fds;
   for (e = list_begin(ls);
@@ -415,7 +421,6 @@ thread_exit (void)
     free(fd_obj);
   }
 
-  // lock_acquire(&file_lock);
   if (t->exec_file) {
     file_allow_write(t->exec_file);
     file_close(t->exec_file);
@@ -730,19 +735,24 @@ init_thread (struct thread *t, const char *name, int priority)
   t->donee = NULL;
   list_init(&t->locks_downed);
 
-  /* user prog initialisation */
+  /* User prog initialisation */
   t->exit_status = 0;
   list_init (&t->baby_sitters);
   list_init (&t->fds);
 
-  if (thread_mlfqs) {
+  if (thread_mlfqs) 
+  {
     if (t != initial_thread)
-      t->recent_cpu_usage = thread_get_recent_cpu ();
-    else
-      t->recent_cpu_usage = 0;
+      {
+        t->recent_cpu_usage = thread_get_recent_cpu ();
+      }else
+      {
+        t->recent_cpu_usage = 0;
+      }
     t -> niceness = 0;
     thread_priority_calc(t, NULL);
-  } else {
+  } else 
+  {
     t -> priority = priority;
   }
 
@@ -773,7 +783,8 @@ alloc_frame (struct thread *t, size_t size)
 static struct thread *
 next_thread_to_run (void) 
 {
-  if (list_empty (&ready_list)) {
+  if (list_empty (&ready_list)) 
+  {
     return idle_thread;
   }
   else {
@@ -847,7 +858,8 @@ schedule (void)
   ASSERT (cur->status != THREAD_RUNNING);
   ASSERT (is_thread (next));
 
-  if (cur != next) {
+  if (cur != next) 
+  {
     prev = switch_threads (cur, next);
   }
   thread_schedule_tail (prev);
@@ -875,18 +887,21 @@ uint32_t thread_stack_ofs = offsetof (struct thread, stack);
 bool 
 pri_comparator (const struct list_elem *a,
             const struct list_elem *b,
-            void *aux UNUSED) {
+            void *aux UNUSED) 
+            {
   return (list_entry(a, struct thread, elem) -> priority)
         < (list_entry(b, struct thread, elem) -> priority);
 }
 
-/* re-calculates the effective priority for a thread */
-void calculate_priority(struct thread *t) {
+/* Re-calculates the effective priority for a thread */
+void calculate_priority(struct thread *t) 
+{
   int old_priority = t->priority;
 
   enum intr_level old_level;   // Note: interrupts disabled to avoid
   old_level = intr_disable();  // synchronisation issues
-  if (list_empty(&t->donations)) {
+  if (list_empty(&t->donations)) 
+  {
     t->priority = t->base_priority;
     intr_set_level(old_level);
     return;
@@ -895,27 +910,31 @@ void calculate_priority(struct thread *t) {
                 list_begin(&t->donations), struct thread, don_elem);
   intr_set_level(old_level);
 
-  if (highest_donor->priority > t->base_priority) {
+  if (highest_donor->priority > t->base_priority) 
+  {
     t->priority = highest_donor->priority;
   }
 
-  if (old_priority == t->priority) {
+  if (old_priority == t->priority) 
+  {
     return;
   }
 
-  // go to the donnee and update the donation value
+  /* Go to the donnee and update the donation value*/
   struct thread *donee_thread = t->donee;
-  if (donee_thread == NULL) {
+  if (donee_thread == NULL) 
+  {
     return;
   }
-  // Note: interrupts disabled to avoid synchronisation issues
+  /* Note: interrupts disabled to avoid synchronisation issues*/
   old_level = intr_disable();  
   struct list *ds = &donee_thread->donations;
   struct list_elem *f;
   for (f = list_begin(ds); f != list_end(ds); f = list_next(f)) {
-    if (list_entry(f, struct thread, don_elem)->tid == t->tid) {
+    if (list_entry(f, struct thread, don_elem)->tid == t->tid) 
+    {
       
-      // re-order donation according to new priority
+      /*Re-order donation according to new priority*/ 
       list_remove(f);
       list_insert_ordered(ds, f, donor_comparator, NULL);
       break;
@@ -923,8 +942,8 @@ void calculate_priority(struct thread *t) {
   }
   intr_set_level(old_level);
 
-  // recursively call calculate_priority for nested donation
-  // synchronisation problems are not a problem as 
-  // end result is same in all cases.
+  /*Recursively call calculate_priority for nested donation
+    synchronisation problems are not a problem as 
+    end result is same in all cases.*/
   calculate_priority(donee_thread);
 }
