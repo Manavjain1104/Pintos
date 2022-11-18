@@ -24,13 +24,13 @@ static struct fd_st *get_fd (int fd);
 static bool validate_filename(const uint8_t * word);
 static bool validate_buffer(const uint8_t * word, size_t size);
 
-/* struct to store child-parent relationship */
+/* Struct to store child-parent relationship */
 struct lock file_lock; 
 
-/* type of functions for sys call handlers */
+/* Type of functions for sys call handlers */
 typedef intr_handler_func syscall_handler_func;
 
-/* handler function definitions */
+/* Handler function definitions */
 syscall_handler_func halt_handler;
 syscall_handler_func exit_handler;
 syscall_handler_func exec_handler;
@@ -45,7 +45,7 @@ syscall_handler_func seek_handler;
 syscall_handler_func tell_handler;
 syscall_handler_func close_handler;
 
-/* array of syscall structs respective system calls */
+/* Array of syscall structs respective system calls */
 static syscall_handler_func *handlers[NUM_SYS_CALLS];
 
 void
@@ -57,7 +57,7 @@ syscall_init (void)
 
   printf("GLOBAL LOCK LID: %d\n", file_lock.lid);
   
-  /* intialising the handlers array with sys call structs */
+  /* Intialising the handlers array with sys call structs */
   handlers[SYS_HALT] = &halt_handler;            
   handlers[SYS_EXIT] = &exit_handler;                  
   handlers[SYS_EXEC] = &exec_handler;
@@ -76,10 +76,10 @@ syscall_init (void)
 static void
 syscall_handler (struct intr_frame *f) 
 { 
-  /* setting sys_cal flag */
+  /* Setting sys_cal flag */
   thread_current()->in_sys_call = true;
 
-  /* verifying and reading value at esp */
+  /* Verifying and reading value at esp */
   int sys_call_num = get_word(f->esp);
 
   if (sys_call_num < 0)
@@ -93,15 +93,16 @@ syscall_handler (struct intr_frame *f)
 }
 
 /* Reads a word at user virtual address UADDR.
-  UADDR must be below PHYS_BASE. 
-  Returns the byte value if successful, -1 if a segfault
-  occurred. */
+   UADDR must be below PHYS_BASE. 
+   Returns the byte value if successful, -1 if a segfault
+   occurred. */
 static int 
 get_word (const uint8_t *uaddr) 
 { 
   int word = 0;
   int byte;
-  for (int i = (WORD_LENGTH - 1); i >= 0; i--) {
+  for (int i = (WORD_LENGTH - 1); i >= 0; i--) 
+  {
     byte = get_byte(uaddr + i);
     if (byte == -1) 
     {
@@ -113,9 +114,9 @@ get_word (const uint8_t *uaddr)
 }
 
 /* Reads a byte at user virtual address UADDR.
-  UADDR must be below PHYS_BASE.
-  Returns the byte value if successful, -1 if a segfault
-  occurred. */
+   UADDR must be below PHYS_BASE.
+   Returns the byte value if successful, -1 if a segfault
+   occurred. */
 static int
 get_user (const uint8_t *uaddr)
 {
@@ -127,15 +128,17 @@ get_user (const uint8_t *uaddr)
 
 
 /* Reads a byte at user virtual address UADDR.
-  Returns the byte value if successful, -1 if a segfault
-  occurred. (wrapper for get_user function)
-  NOTE:- Trigger a page_fault.*/
+   Returns the byte value if successful, -1 if a segfault
+   occurred. (wrapper for get_user function)
+   NOTE:- Trigger a page_fault.*/
 static int
 get_byte (const uint8_t *uaddr)
 {
-  if (is_user_vaddr(uaddr)) {
+  if (is_user_vaddr(uaddr)) 
+  {
     int byte = get_user(uaddr);
-    if (byte != -1) {
+    if (byte != -1) 
+    {
       return byte;
     }
   }
@@ -143,8 +146,8 @@ get_byte (const uint8_t *uaddr)
 }
 
 /* Writes BYTE to user address UDST.
-  UDST must be below PHYS_BASE.
-  Returns true if successful, false if a segfault occurred. */
+   UDST must be below PHYS_BASE.
+   Returns true if successful, false if a segfault occurred. */
 static bool
 put_user (uint8_t *udst, uint8_t byte)
 {
@@ -155,15 +158,15 @@ put_user (uint8_t *udst, uint8_t byte)
 }
 
 /* Writes BYTE to user address UDST.
-  If fails to write at user address, sets exit status to -1 and thread exits.
-  NOTE:- Does not trigger page_fault */
+   If fails to write at user address, sets exit status to -1 and thread exits.
+   NOTE:- Does not trigger page_fault */
 static bool
 put_byte (uint8_t *udst, uint8_t byte)
 {
   return is_user_vaddr(udst) && put_user(udst, byte);
 }
 
-/* system call functions */
+/* System call functions */
 void 
 halt_handler(struct intr_frame *f UNUSED) 
 {
@@ -179,7 +182,7 @@ exec_handler(struct intr_frame *f)
 
   if (word == -1 || !validate_filename((const uint8_t *) word))
   {
-    // problem with the data provided
+    // Problem with the data provided
     f->eax = -1;
     return;
   }
@@ -195,7 +198,7 @@ exit_handler(struct intr_frame *f)
   thread_current()->exit_status = get_word(f->esp + sizeof(void *));
   if (bs != NULL)
   {
-    // this means that parent is alive and might need visibility of exit_status
+    //This means that parent is alive and might need visibility of exit_status
     bs->exit_status = thread_current()->exit_status;
   }
   thread_exit();
@@ -220,14 +223,15 @@ open_handler(struct intr_frame *f)
   
   lock_acquire(&file_lock);
   fd_obj->fd = allocate_fd();
-  if (word == -1 
-     || !validate_filename((const uint8_t *) word))
+  if (word == -1 || !validate_filename((const uint8_t *) word))
   { 
     lock_release(&file_lock);
     free(fd_obj);
     delete_thread(-1);
   }
+
   fd_obj->file_pt = filesys_open((const char *)word);
+  
   if (!fd_obj->file_pt)
   {
     lock_release(&file_lock);
@@ -244,6 +248,7 @@ open_handler(struct intr_frame *f)
     f->eax = -1;
     return;
   }
+  
   list_push_back(&thread_current()->fds, &fd_obj->elem);
   lock_release(&file_lock);
   
@@ -257,12 +262,14 @@ filesize_handler(struct intr_frame *f)
   struct fd_st *fd_obj;
 
   lock_acquire(&file_lock);
+  
   if ((fd_obj = get_fd(fd)) == NULL)
   {
     lock_release(&file_lock);
     f->eax = 0xffffffff;
     return;
   }
+  
   f->eax = file_length(fd_obj->file_pt);
   lock_release(&file_lock);
 }
@@ -292,7 +299,7 @@ read_handler(struct intr_frame *f)
     return;
   }
 
-  /* create a fd object only when necessary */
+  /* Create a fd object only when necessary */
   lock_acquire(&file_lock);
   struct fd_st *fd_obj = get_fd(fd);
   if (fd_obj == NULL)
@@ -302,7 +309,7 @@ read_handler(struct intr_frame *f)
     return;
   }
 
-  /* create a temporary buffer for reading using file struct */
+  /* Create a temporary buffer for reading using file struct */
   uint8_t *temp_buf = malloc(size * sizeof(uint8_t));
   int actual_read = file_read(fd_obj->file_pt, temp_buf, size);
   lock_release(&file_lock);
@@ -314,6 +321,7 @@ read_handler(struct intr_frame *f)
 
   free(temp_buf);
   f->eax = actual_read;
+
 }
 
 void
@@ -331,7 +339,7 @@ write_handler(struct intr_frame *f UNUSED)
     delete_thread(-1);
   }
   
-  /* writing from user mem buffer to temp buffer */
+  /* Writing from user mem buffer to temp buffer */
   uint8_t *temp_buffer = malloc(size * sizeof(uint8_t));
   for (int i = 0; i < size; i++)
   { 
@@ -340,7 +348,7 @@ write_handler(struct intr_frame *f UNUSED)
   
   if (fd == STDOUT_FILENO) 
   {
-    /* writing out to putbuf in multiples of STDOUT_MAX_BUFFER_SIZE */
+    /* Writing out to putbuf in multiples of STDOUT_MAX_BUFFER_SIZE */
     for (int i = 0; i < size; i += STDOUT_MAX_BUFFER_SIZE)
     { 
       size_t actual_size = (size - i * STDOUT_MAX_BUFFER_SIZE) < STDOUT_MAX_BUFFER_SIZE 
@@ -354,7 +362,7 @@ write_handler(struct intr_frame *f UNUSED)
     return;
   }
 
-  /* create a fd object only when necessary */
+  /* Create a fd object only when necessary */
   lock_acquire(&file_lock);
   struct fd_st *fd_obj = get_fd(fd);
   if (fd_obj == NULL)
@@ -365,7 +373,7 @@ write_handler(struct intr_frame *f UNUSED)
     return;
   }
 
-  /* write out to file */
+  /* Write out to file */
   f->eax = file_write(fd_obj->file_pt, temp_buffer, size);
   lock_release(&file_lock);
 
@@ -385,7 +393,7 @@ create_handler(struct intr_frame *f)
     delete_thread(-1);
   } 
 
-  // debug_backtrace_all();
+  // Debug_backtrace_all();
   lock_acquire(&file_lock);
   f->eax = filesys_create ((const char *) file_name, initial_size);
   lock_release(&file_lock);
@@ -450,6 +458,7 @@ close_handler(struct intr_frame *f)
     lock_release(&file_lock);
     return;
   }
+
   file_close(fd_obj->file_pt);
   lock_release(&file_lock);
 
@@ -466,8 +475,7 @@ allocate_fd (void)
   return next_fd++;
 }
 
-/* Returns 'struct fd' if fd is valid for current thread 
-   else returns null */
+/* Returns 'struct fd' if fd is valid for current thread else returns null */
 static struct fd_st *
 get_fd (int fd)
 {
@@ -487,11 +495,12 @@ get_fd (int fd)
   return NULL;
 }
 
-/* sets exit status to 'exit_stat' for thread and then performs thread exit */
+/* Sets exit status to 'exit_stat' for thread and then performs thread exit */
 void delete_thread (int exit_stat) {
   thread_current()->exit_status = exit_stat;
 
   intr_disable();
+  
   if (thread_current()->nanny != NULL)
   {
    thread_current()->nanny->exit_status = exit_stat;
@@ -502,7 +511,7 @@ void delete_thread (int exit_stat) {
 static bool
 validate_filename(const uint8_t * word)
 {
-  /* check uptill 14 characters for valid file_name */
+  /* Check uptill 14 characters for valid file_name */
   int i = 0;
   int byte = get_byte(word + i);
   while (i < MAX_FILE_NAME_SIZE 
