@@ -8,6 +8,7 @@
 #define STDOUT_MAX_BUFFER_SIZE 500
 #define MAX_FILE_NAME_SIZE 14
 #define USER_STACK_LOWER_BOUND 0xbffff000
+#define SYS_HANDLERS_SIZE 13
 
 extern struct lock file_lock;
 

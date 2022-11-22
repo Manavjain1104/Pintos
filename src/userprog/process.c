@@ -577,14 +577,13 @@ setup_stack (void **esp, char *fn_copy, char *saveptr)
                        + sizeof(void *);
 
         /* Pre-checking for overflow in user stack */
-        if (PGSIZE - sizeof(struct thread) < total_bytes) 
+        if (PGSIZE < total_bytes) 
         {
-          palloc_free_page(kpage);
           return false;
         }
 
         /* Start updating user stack */
-        char *arg_pt_arr[argc];
+        char **arg_pt_arr = (char **) malloc(sizeof(char*) * argc);
         char *arg;
         int len = strlen(fn_copy) + 1;
         *esp = *esp - len;
@@ -618,6 +617,8 @@ setup_stack (void **esp, char *fn_copy, char *saveptr)
           *esp = *esp - sizeof(char *);
           memcpy(*esp, &arg_pt_arr[i], sizeof(char *));
         }
+
+        free(arg_pt_arr);
 
         /* Set up argv and argc on the stack */
         memcpy((*esp - sizeof(char *)), esp, sizeof(char *));

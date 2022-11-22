@@ -367,7 +367,6 @@ thread_exit (void)
   /* Remove thread from all threads list, set our status to dying,
      and schedule another process.  That process will destroy us
      when it calls thread_schedule_tail(). */
-  intr_disable ();
   struct thread *t = thread_current();
   list_remove (&t->allelem);
 
@@ -384,6 +383,7 @@ thread_exit (void)
     lock_release(list_entry(e, struct lock, elem));
   }
 
+  enum intr_level old_level = intr_disable ();
   /* Fix parent and child referecences of baby_sitters */
   ls = &t->baby_sitters;
   struct baby_sitter *bs;
@@ -407,6 +407,7 @@ thread_exit (void)
     t->nanny->child = NULL;
     sema_up(&t->nanny->sema);
   }
+  intr_set_level(old_level);
     
   /* Free fd objects held by the current thread */
   lock_acquire(&file_lock);
@@ -429,6 +430,7 @@ thread_exit (void)
   printf ("%s: exit(%d)\n", t->name, t->exit_status);
 
   t->status = THREAD_DYING;
+  intr_disable();
   schedule ();
   NOT_REACHED ();
 }

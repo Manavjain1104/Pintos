@@ -54,8 +54,6 @@ syscall_init (void)
   intr_register_int (SYSCALL_INTR_NUM, 3, INTR_ON, syscall_handler, "syscall");
 
   lock_init(&file_lock);
-
-  printf("GLOBAL LOCK LID: %d\n", file_lock.lid);
   
   /* Intialising the handlers array with sys call structs */
   handlers[SYS_HALT] = &halt_handler;            
@@ -82,7 +80,7 @@ syscall_handler (struct intr_frame *f)
   /* Verifying and reading value at esp */
   int sys_call_num = get_word(f->esp);
 
-  if (sys_call_num < 0)
+  if (sys_call_num < 0 && sys_call_num < SYS_HANDLERS_SIZE)
   {
     delete_thread(-1);
   }
@@ -532,6 +530,5 @@ validate_buffer(const uint8_t * word, size_t size)
       || (unsigned) word < USER_STACK_LOWER_BOUND) {
         return get_byte(word) != -1;
   }
-
-  return true;
+  return false;
 }
