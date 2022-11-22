@@ -6,10 +6,10 @@ static hash_hash_func frame_hash_func;  // hash function for frame table
 static hash_less_func frame_less_func;  // hash less function for frame table
 
 
-void
+bool
 generate_frame_table(struct hash *frame_table) 
 {
-    return (hash_init(frame_table, frame_hash_func, frame_less_func, NULL));
+    return hash_init(frame_table, frame_hash_func, frame_less_func, NULL);
 }
 
 void 
@@ -25,21 +25,25 @@ insert(struct hash *frame_table, struct frame_entry *frame)
 }
 
 struct frame_entry *
-evict_frame(struct hash *frame_table)
+evict_frame(struct hash *frame_table UNUSED)
 {
     // implement eviction policy - AUKAAT BANAO PEHLE LAUDE
     return NULL;
 }
 
-void
-free_frame(struct hash *frame_table, struct frame_entry *fake_frame)
-{
-    struct hash_elem *he = hash_delete(frame_table, fake_frame);
+bool
+free_frame(struct hash *frame_table, void *kva)
+{   
+    struct frame_entry fake_frame;
+    fake_frame.kva = kva;
+    struct hash_elem *he = hash_delete(frame_table, &fake_frame.elem);
     if (he != NULL)
     {
         // mathced an entry
         free(hash_entry(he, struct frame_entry, elem));
+        return true;
     }
+    return false;
 }
     
 

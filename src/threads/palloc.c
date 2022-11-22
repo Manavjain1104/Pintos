@@ -66,7 +66,10 @@ palloc_init (size_t user_page_limit)
   init_pool (&user_pool, free_start + kernel_pages * PGSIZE,
              user_pages, "user pool");
 
-  generate_frame_table(&frame_table);
+  if (!generate_frame_table(&frame_table))
+  {
+    PANIC("Could not generate frame table! \n");
+  }
 }
 
 /* Obtains and returns a group of PAGE_CNT contiguous free pages.
@@ -118,7 +121,28 @@ palloc_get_multiple (enum palloc_flags flags, size_t page_cnt)
 void *
 palloc_get_page (enum palloc_flags flags) 
 {
-  return palloc_get_multiple (flags, 1);
+  void *kva =  palloc_get_multiple (flags, 1);
+  if (flags & PAL_USER)
+  {
+    if (kva == NULL)
+    {
+      return NULL; // TODO
+      /* evict and already existing frame and change its page reference */
+      // struct frame_entry * old_frame_pt = evict_frame(&frame_table);
+      // struct frame_entry new_frame;
+      // new_frame.owner = thread_current();
+      // update_entry(old_frame_pt, &new_frame);
+      // return old_frame_pt->kva;
+    } 
+
+    /* insert new entry into page table */
+    struct frame_entry *frame_pt  = malloc(sizeof(struct frame_entry));
+    frame_pt -> owner = thread_current();
+    frame_pt -> kva = kva;
+    insert(&frame_table, frame_pt);
+  }
+
+  return kva;
 }
 
 /* Frees the PAGE_CNT pages starting at PAGES. */
@@ -153,6 +177,7 @@ palloc_free_multiple (void *pages, size_t page_cnt)
 void
 palloc_free_page (void *page) 
 {
+  free_frame(&frame_table, page);
   palloc_free_multiple (page, 1);
 }
 
@@ -189,22 +214,24 @@ page_from_pool (const struct pool *pool, void *page)
   return page_no >= start_page && page_no < end_page;
 }
 
-void *
-palloc_get_frame (enum palloc_flags flags) 
-{
-  void *kva =  palloc_get_page (flags);
-  if (kva == NULL)
-  {
-    struct frame_entry * old_frame_pt = evict_frame(&frame_table);
-    struct frame_entry new_frame;
-    new_frame.owner = thread_current();
-    update_entry(old_frame_pt, &new_frame);
-    return old_frame_pt->kva;
-  } 
-  struct frame_entry *frame_pt  = malloc(sizeof(struct frame_entry));
-  frame_pt -> owner = thread_current();
-  frame_pt -> kva = kva;
-  insert(&frame_table, frame_pt);
-  return kva;
-  
-}
+// void *
+// palloc_get_frame (enum palloc_flags flags) 
+// {
+//   void *kva =  palloc_get_page (flags);
+//   if (kva == NULL)
+//   {
+//     /* evict and already existing frame and change its page reference */
+//     struct frame_entry * old_frame_pt = evict_frame(&frame_table);
+//     struct frame_entry new_frame;
+//     new_frame.owner = thread_current();
+//     update_entry(old_frame_pt, &new_frame);
+//     return old_frame_pt->kva;
+//   } 
+
+//   /* insert new entry into page table */
+//   struct frame_entry *frame_pt  = malloc(sizeof(struct frame_entry));
+//   frame_pt -> owner = thread_current();
+//   frame_pt -> kva = kva;
+//   insert(&frame_table, frame_pt);
+//   return kva;
+// }
