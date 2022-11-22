@@ -11,10 +11,14 @@ enum palloc_flags
     PAL_USER = 004              /* User page. */
   };
 
+/* */
+extern struct hash frame_table;
+
 void palloc_init (size_t user_page_limit);
 void *palloc_get_page (enum palloc_flags);
 void *palloc_get_multiple (enum palloc_flags, size_t page_cnt);
 void palloc_free_page (void *);
 void palloc_free_multiple (void *, size_t page_cnt);
+void *palloc_get_frame (enum palloc_flags);
 
 #endif /* threads/palloc.h */

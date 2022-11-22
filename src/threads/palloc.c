@@ -10,6 +10,10 @@
 #include "threads/loader.h"
 #include "threads/synch.h"
 #include "threads/vaddr.h"
+#include "threads/thread.h"
+#include "threads/malloc.h"
+#include "vm/frame.h"
+
 
 /* Page allocator.  Hands out memory in page-size (or
    page-multiple) chunks.  See malloc.h for an allocator that
@@ -40,6 +44,8 @@ static void init_pool (struct pool *, void *base, size_t page_cnt,
                        const char *name);
 static bool page_from_pool (const struct pool *, void *page);
 
+struct hash frame_table;
+
 /* Initializes the page allocator.  At most USER_PAGE_LIMIT
    pages are put into the user pool. */
 void
@@ -59,6 +65,8 @@ palloc_init (size_t user_page_limit)
   init_pool (&kernel_pool, free_start, kernel_pages, "kernel pool");
   init_pool (&user_pool, free_start + kernel_pages * PGSIZE,
              user_pages, "user pool");
+
+  generate_frame_table(&frame_table);
 }
 
 /* Obtains and returns a group of PAGE_CNT contiguous free pages.
@@ -179,4 +187,24 @@ page_from_pool (const struct pool *pool, void *page)
   size_t end_page = start_page + bitmap_size (pool->used_map);
 
   return page_no >= start_page && page_no < end_page;
+}
+
+void *
+palloc_get_frame (enum palloc_flags flags) 
+{
+  void *kva =  palloc_get_page (flags);
+  if (kva == NULL)
+  {
+    struct frame_entry * old_frame_pt = evict_frame(&frame_table);
+    struct frame_entry new_frame;
+    new_frame.owner = thread_current();
+    update_entry(old_frame_pt, &new_frame);
+    return old_frame_pt->kva;
+  } 
+  struct frame_entry *frame_pt  = malloc(sizeof(struct frame_entry));
+  frame_pt -> owner = thread_current();
+  frame_pt -> kva = kva;
+  insert(&frame_table, frame_pt);
+  return kva;
+  
 }

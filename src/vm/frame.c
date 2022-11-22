@@ -4,18 +4,12 @@
 
 static hash_hash_func frame_hash_func;  // hash function for frame table
 static hash_less_func frame_less_func;  // hash less function for frame table
-static void update_entry (struct frame_entry *old, struct frame_entry *new);
 
 
-struct hash *
-generate_frame_table() 
+void
+generate_frame_table(struct hash *frame_table) 
 {
-    struct hash *frame_table = malloc(sizeof(struct hash));
-    if (!hash_init(frame_table, frame_hash_func, frame_less_func, NULL))
-    {
-        return NULL;
-    }
-    return frame_table;
+    return (hash_init(frame_table, frame_hash_func, frame_less_func, NULL));
 }
 
 void 
@@ -26,6 +20,7 @@ insert(struct hash *frame_table, struct frame_entry *frame)
     {   
         /* update values in the old_entry with the same frame kva */
         update_entry (hash_entry(he, struct frame_entry, elem), frame);
+        free(frame);
     }
 }
 
@@ -61,8 +56,7 @@ static bool frame_less_func (const struct hash_elem *a,
         < (hash_entry(b, struct frame_entry, elem) -> kva);
 }
 
-static void update_entry (struct frame_entry *old, struct frame_entry *new)
+void update_entry (struct frame_entry *old, struct frame_entry *new)
 {
     old->owner = new->owner;
-    free(new);
 }
