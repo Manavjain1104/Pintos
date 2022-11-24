@@ -6,7 +6,9 @@
 #define NUM_BUCKETS 1024
 
 struct frame_entry {
-    void *kva;
+    uint32_t *kva;
+    // add user va
+    // pointer to the kva of the structure that the spt fetched
     struct thread *owner;
     struct hash_elem elem;
 };
