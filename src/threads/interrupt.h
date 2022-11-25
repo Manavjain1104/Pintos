@@ -26,7 +26,7 @@ struct intr_frame
     uint32_t edi;               /* Saved EDI. */
     uint32_t esi;               /* Saved ESI. */
     uint32_t ebp;               /* Saved EBP. */
-    uint32_t esp_dummy;         /* Used to identify syscall */
+    uint32_t esp_dummy;         /* not used */
     uint32_t ebx;               /* Saved EBX. */
     uint32_t edx;               /* Saved EDX. */
     uint32_t ecx;               /* Saved ECX. */
@@ -55,9 +55,6 @@ struct intr_frame
     uint32_t eflags;            /* Saved CPU flags. */
     void *esp;                  /* Saved stack pointer. */
     uint16_t ss, :16;           /* Data segment for esp. */
-
-    // bool is_syscall;            /* tells page-fault that 
-    //                             interupt frame is in page_fault*/
   };
 
 typedef void intr_handler_func (struct intr_frame *);

@@ -45,14 +45,14 @@ process_execute (const char *file_name)
   strlcpy (fn_copy, file_name, PGSIZE);
   
   /* extract out command name for the thread name */
-  name = palloc_get_page (0);
+  name = malloc (sizeof(char) * MAX_FILE_NAME_SIZE + 1);
   if (name == NULL)
   {
     palloc_free_page(fn_copy);
     return TID_ERROR;
   }
 
-  strlcpy (name, file_name, PGSIZE);
+  strlcpy (name, file_name, sizeof(char) * MAX_FILE_NAME_SIZE + 2);
   char *fakeptr;
 
   strtok_r(name, " ", &fakeptr);
@@ -60,7 +60,7 @@ process_execute (const char *file_name)
   /* Create a new thread to execute FILE_NAME. */
   tid = thread_create (name, PRI_DEFAULT, start_process, fn_copy);
 
-  palloc_free_page(name);
+  free(name);
 
   if (tid == TID_ERROR) 
   {
@@ -268,7 +268,7 @@ struct Elf32_Phdr
 
 static bool setup_stack (void **esp, char *fn_copy, char *saveptr);
 static bool validate_segment (const struct Elf32_Phdr *, struct file *);
-static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
+static bool load_segment (off_t ofs, uint8_t *upage,
                           uint32_t read_bytes, uint32_t zero_bytes,
                           bool writable);
 
@@ -376,7 +376,7 @@ load (char *file_name, void (**eip) (void), void **esp)
                   read_bytes = 0;
                   zero_bytes = ROUND_UP (page_offset + phdr.p_memsz, PGSIZE);
                 }
-              if (!load_segment (file, file_page, (void *) mem_page,
+              if (!load_segment (file_page, (void *) mem_page,
                                  read_bytes, zero_bytes, writable))
                 goto done;
             }
@@ -466,7 +466,7 @@ validate_segment (const struct Elf32_Phdr *phdr, struct file *file)
    Return true if successful, false if a memory allocation error
    or disk read error occurs. */
 static bool
-load_segment (struct file *file, off_t ofs, uint8_t *upage,
+load_segment (off_t ofs, uint8_t *upage,
               uint32_t read_bytes, uint32_t zero_bytes, bool writable) 
 {
   ASSERT ((read_bytes + zero_bytes) % PGSIZE == 0);
@@ -488,15 +488,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       spe->writable = writable;
       spe->page_read_bytes = page_read_bytes;
       spe->absolute_off = ofs + PGSIZE * pg_num;
-      if (page_read_bytes == 0)
-      {
-        spe->data_pt = NULL;
-        spe->location = ALL_ZERO;
-      } else
-      {
-        spe->data_pt = file;
-        spe->location = FILE_SYS;
-      }
+      spe->location = (page_read_bytes == 0) ? ALL_ZERO : FILE_SYS;
       
       hash_insert(&thread_current()->sp_table, &spe->elem);
 
