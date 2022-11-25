@@ -4,7 +4,7 @@
 
 static hash_hash_func spt_hash_func;  // hash function for frame table
 static hash_less_func spt_less_func;  // hash less function for frame table
-static hash_less_func spt_free_func;  // hash less function for frame table
+static hash_action_func spt_free_func;  // hash less function for frame table
 
 bool 
 generate_spt_table(struct hash *spt_table)
@@ -13,7 +13,7 @@ generate_spt_table(struct hash *spt_table)
 }
 
 void 
-insert(struct hash *spt_table, struct spt_entry *spe)
+insert_spe(struct hash *spt_table, struct spt_entry *spe)
 {
     struct hash_elem *he = hash_insert(spt_table, &spe->elem);
     ASSERT(he);
@@ -24,7 +24,7 @@ free_entry(struct hash *spt_table, void *upage)
 {
     struct spt_entry fake_spe;
     fake_spe.upage = upage;
-    struct hash_elem *he = hash_delete(spt_table, &fake_spe.upage);
+    struct hash_elem *he = hash_delete(spt_table, &fake_spe.elem);
     ASSERT(he);
     free(hash_entry(he, struct spt_entry, elem));
 }

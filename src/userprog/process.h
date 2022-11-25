@@ -4,6 +4,8 @@
 #include "threads/thread.h"
 #include "threads/synch.h"
 
+bool install_page (void *upage, void *kpage, bool writable);
+
 /* struct to maintain a child-parent relationship for exit statuses */
 struct baby_sitter {
     struct thread *child;

@@ -404,7 +404,7 @@ load (char *file_name, void (**eip) (void), void **esp)
 
 /* load() helpers. */
 
-static bool install_page (void *upage, void *kpage, bool writable);
+// bool install_page (void *upage, void *kpage, bool writable);
 
 /* Checks whether PHDR describes a valid, loadable segment in
    FILE and returns true if so, false otherwise. */
@@ -495,7 +495,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       } else
       {
         spe->data_pt = file;
-        spe->location = FILESYS;
+        spe->location = FILE_SYS;
       }
       
       hash_insert(&thread_current()->sp_table, &spe->elem);
@@ -634,7 +634,7 @@ setup_stack (void **esp, char *fn_copy, char *saveptr)
    with palloc_get_page().
    Returns true on success, false if UPAGE is already mapped or
    if memory allocation fails. */
-static bool
+bool
 install_page (void *upage, void *kpage, bool writable)
 {
   struct thread *t = thread_current ();

@@ -5,6 +5,7 @@
 static hash_hash_func frame_hash_func;  // hash function for frame table
 static hash_less_func frame_less_func;  // hash less function for frame table
 
+// TODO : add owners list for sharing, all have to be told when evicting
 
 bool
 generate_frame_table(struct hash *frame_table) 
@@ -13,7 +14,7 @@ generate_frame_table(struct hash *frame_table)
 }
 
 void 
-insert(struct hash *frame_table, struct frame_entry *frame)
+insert_frame(struct hash *frame_table, struct frame_entry *frame)
 {
     struct hash_elem *he = hash_insert(frame_table, &frame->elem);
     if (he != NULL)

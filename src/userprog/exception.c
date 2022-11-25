@@ -9,6 +9,9 @@
 #include "threads/palloc.h"
 #include "threads/vaddr.h"
 #include "vm/spt.h"
+#include "devices/swap.h"
+#include "lib/string.h"
+#include "userprog/pagedir.h"
 
 /* Number of page faults processed. */
 static long long page_fault_cnt;
@@ -16,6 +19,10 @@ static long long page_fault_cnt;
 static void kill (struct intr_frame *);
 static void page_fault (struct intr_frame *);
 static bool actual_load_page(struct spt_entry *spe);
+static uint8_t * get_and_install_page(enum palloc_flags flags, 
+                     void *upage, 
+                     uint32_t *pagedir, 
+                     bool writable);
 
 /* Registers handlers for interrupts that can be caused by user
    programs.
@@ -159,70 +166,106 @@ page_fault (struct intr_frame *f)
    f->eax = 0xffffffff;
    return;
   }
-   
+
+  if (!is_user_vaddr(fault_addr))
+  {   
+     // process tried to access kernel page
+     goto failure;
+  }
+
+  /* check validity of page in spt if page was not present */
+  if (not_present)
+   {
+      struct hash spt = thread_current()->sp_table;
+      struct spt_entry fake_entry;
+      fake_entry.upage = fault_addr;
+      struct hash_elem *found = hash_find (&spt, &fake_entry.elem);
+
+      if (!found)
+      {
+         // user tried to access data that shouldn't be there
+         printf("SPE ENTRY NOT FOUND \n");
+         goto failure;
+      }
+
+      struct spt_entry *spe = hash_entry(found, struct spt_entry, elem);
+      if (!spe->writable && write)
+      {
+         // user tried to write to a read only page
+         goto failure;
+      }
+
+      // code reaching here indicates that access was valid, load neccesary
+      if (spe->location == FILE_SYS || spe->location == ALL_ZERO)
+      {
+         if (!actual_load_page(spe))
+         {
+            printf("Failed to load spt page entry at addr: %p", fault_addr);
+            goto failure;
+         }
+      } else
+      {
+         // page must exist in a swap slot
+         ASSERT (spe->location == SWAP_SLOT);
+         swap_in (spe->upage, spe->swap_slot);
+      }
+   f->eip = (void *) f->eax;  // TODO: check this with mark
+   return;
+   }
+
+ failure:
    printf ("Page fault at %p: %s error %s page in %s context.\n",
          fault_addr,
          not_present ? "not present" : "rights violation",
          write ? "writing" : "reading",
          user ? "user" : "kernel"); 
    
-  kill (f);
+   kill (f);
 }
 
+/* function called when page faults for FILE_SYS or ALL_ZERO pages */
 static bool 
 actual_load_page(struct spt_entry *spe)
 {  
-   // TODO : SPT ENTRY FREE DONT FORGET
+   // hygeine check
+   ASSERT (spe->location == FILE_SYS ||  spe->location == ALL_ZERO);
 
-   /* Check if virtual page already allocated */
-      struct thread *t = thread_current ();
+   struct thread *t = thread_current ();
+   uint8_t *kpage;
+   enum palloc_flags flags = PAL_USER;
+   if (spe->location == ALL_ZERO)
+   {
+      flags |= PAL_ZERO;
+   }
 
-      if (spe->location == ALL_ZERO)
-      {
-         get_and_install_page(PAL_USER | PAL_ZERO, )
-      }
+   kpage = get_and_install_page(flags, 
+                           spe->upage, 
+                           t->pagedir, 
+                           spe->writable);
+   
+   /* case when the get and install fails */
+   if (kpage == NULL)
+   { 
+      return false;
+   } 
 
-      uint8_t *kpage = pagedir_get_page (t->pagedir, spe->upage);
-      
-      if (kpage == NULL)
-      {
-        /* Get a new page of memory. */
-        kpage = palloc_get_page (PAL_USER);
-        if (kpage == NULL)
-        {
-          return false;
-        }
-        
-        /* Add the page to the process's address space. */
-        if (!install_page (spe->upage, kpage, spe->writable)) 
-        {
-          palloc_free_page (kpage);
-          return false; 
-        }     
-        
-      } else 
-      {  
-        /* Check if writable flag for the page should be updated */
-        if(spe->writable && !pagedir_is_writable(t->pagedir, spe->upage))
-         {
-          pagedir_set_writable(t->pagedir, spe->upage, spe->writable); 
-         }
-      }
-
-      /* Load data into the page. */
-      struct file *fp = (struct file *) spe->data_pt;
-      lock_acquire(&file_lock);
-      file_seek(fp, spe->absolute_off);
-      if (file_read (fp, kpage, spe->page_read_bytes) 
-            != (int) spe->page_read_bytes)
-      {
-         lock_release(&file_lock);
-         return false;
-      }
+   /* Load data into the page. */
+   struct file *fp = (struct file *) spe->data_pt;
+   lock_acquire(&file_lock);
+   file_seek(fp, spe->absolute_off);
+   if (file_read (fp, kpage, spe->page_read_bytes) 
+         != (int) spe->page_read_bytes)
+   {
       lock_release(&file_lock);
-      memset (kpage + spe->page_read_bytes, 0, PGSIZE - spe->page_read_bytes);
+      return false;
+   }
+   lock_release(&file_lock);
+   memset (kpage + spe->page_read_bytes, 0, PGSIZE - spe->page_read_bytes);
+   return true;
 }
 
+/* pallocs and intsalls upage in the current thread's directory
+if not already instlaled (sharing); returns null when fails */
 static uint8_t *
 get_and_install_page(enum palloc_flags flags, 
                      void *upage, 
@@ -234,7 +277,7 @@ get_and_install_page(enum palloc_flags flags,
    if (kpage == NULL)
    {
      /* Get a new page of memory. */
-     kpage = palloc_get_page (PAL_USER);
+     kpage = palloc_get_page (flags);
      if (kpage == NULL)
      {
        return NULL;

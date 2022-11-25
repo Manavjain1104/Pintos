@@ -2,28 +2,34 @@
 #define SPT_H
 
 #include "lib/kernel/hash.h"
+#include "filesys/off_t.h"
 
 enum data_location_flags
   {
     RAM,   
-    SWAP_TABLE,      
-    FILESYS,
+    SWAP_SLOT,      
+    FILE_SYS,
     ALL_ZERO 
   };
 
 struct spt_entry {
-    void *upage;
-	  void *data_pt;
-    off_t absolute_off;
-    size_t page_read_bytes;
-    enum data_location_flags location;
-    bool writable;
-    struct hash_elem elem;
+    void *upage;    // key of the table
+	  void *data_pt;  // soruce of data
+
+    off_t absolute_off;        // meta data for file sys 
+    size_t page_read_bytes;    // loading
+
+    size_t swap_slot;
+
+    enum data_location_flags location; // location of data to be loaded
+    
+    bool writable; // writability of the page
+    struct hash_elem elem; // to make part of spt
 };
 
 bool generate_spt_table(struct hash *spt_table);
-void insert(struct hash *spt_table, struct spt_entry *spe);
+void insert_spe(struct hash *spt_table, struct spt_entry *spe);
 void free_entry(struct hash *spt_table, void *upage);
 void destroy_spt_table(struct hash *spt_table);
 
-#endif SPT_H
+#endif /* vm/spt.h */

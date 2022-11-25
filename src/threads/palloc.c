@@ -13,6 +13,7 @@
 #include "threads/thread.h"
 #include "threads/malloc.h"
 #include "vm/frame.h"
+#include "devices/swap.h"
 
 
 /* Page allocator.  Hands out memory in page-size (or
@@ -66,10 +67,14 @@ palloc_init (size_t user_page_limit)
   init_pool (&user_pool, free_start + kernel_pages * PGSIZE,
              user_pages, "user pool");
 
+  /* initialise the frame table */
   if (!generate_frame_table(&frame_table))
   {
     PANIC("Could not generate frame table! \n");
   }
+
+  /* initialise the swap space */
+  swap_init();
 }
 
 /* Obtains and returns a group of PAGE_CNT contiguous free pages.
@@ -139,7 +144,7 @@ palloc_get_page (enum palloc_flags flags)
     struct frame_entry *frame_pt  = malloc(sizeof(struct frame_entry));
     frame_pt -> owner = thread_current();
     frame_pt -> kva = kva;
-    insert(&frame_table, frame_pt);
+    insert_frame(&frame_table, frame_pt);
   }
 
   return kva;
@@ -232,6 +237,6 @@ page_from_pool (const struct pool *pool, void *page)
 //   struct frame_entry *frame_pt  = malloc(sizeof(struct frame_entry));
 //   frame_pt -> owner = thread_current();
 //   frame_pt -> kva = kva;
-//   insert(&frame_table, frame_pt);
+//   insert_frame(&frame_table, frame_pt);
 //   return kva;
 // }

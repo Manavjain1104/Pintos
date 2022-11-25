@@ -73,7 +73,8 @@ syscall_init (void)
 
 static void
 syscall_handler (struct intr_frame *f) 
-{ 
+{  
+  printf("IN A SYS CALL \n");
   /* Setting sys_cal flag */
   thread_current()->in_sys_call = true;
 
