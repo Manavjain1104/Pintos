@@ -8,6 +8,7 @@
 #include "fixed-point.h"
 #include "filesys/file.h"
 #include "devices/timer.h"
+#include "lib/kernel/hash.h"
 
 /* States in a thread's life cycle. */
 enum thread_status
@@ -111,9 +112,11 @@ struct thread
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
 
-#ifdef USERPROG
+// #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
+
+    struct hash sp_table;              /* supplemental page table */
     
     /* to allow thread to be part of children list in 
     parent process thread */
@@ -133,7 +136,7 @@ struct thread
 
     /* executable file to keep track of which file to deny writes to */
     struct file *exec_file; 
-#endif
+// #endif
 
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */

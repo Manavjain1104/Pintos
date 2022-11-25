@@ -20,6 +20,7 @@
 #include "threads/synch.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
+#include "vm/spt.h"
 
 static thread_func start_process NO_RETURN;
 static bool load (char *cmdline, void (**eip) (void), void **esp);
@@ -181,6 +182,9 @@ process_exit (void)
       pagedir_activate (NULL);
       pagedir_destroy (pd);
     }
+  
+  /* destroy supplemental page_table */
+  destroy_spt_table(&cur->sp_table);
 }
 
 /* Sets up the CPU for running user code in the current
@@ -287,6 +291,9 @@ load (char *file_name, void (**eip) (void), void **esp)
   if (t->pagedir == NULL) 
     goto done;
   process_activate ();
+
+  /* supplemental page table intialisation */
+  generate_spt_table(&t->sp_table);
 
   /* Parsing the file name from the fn_copy */
   char *saveptr;
@@ -466,7 +473,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
   ASSERT (pg_ofs (upage) == 0);
   ASSERT (ofs % PGSIZE == 0);
 
-  file_seek (file, ofs);
+  int pg_num = 0;
   while (read_bytes > 0 || zero_bytes > 0) 
     {
       /* Calculate how to fill this page.
@@ -474,45 +481,30 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
          and zero the final PAGE_ZERO_BYTES bytes. */
       size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
       size_t page_zero_bytes = PGSIZE - page_read_bytes;
-      
-      /* Check if virtual page already allocated */
-      struct thread *t = thread_current ();
-      uint8_t *kpage = pagedir_get_page (t->pagedir, upage);
-      
-      if (kpage == NULL){
-        
-        /* Get a new page of memory. */
-        kpage = palloc_get_page (PAL_USER);
-        if (kpage == NULL){
-          return false;
-        }
-        
-        /* Add the page to the process's address space. */
-        if (!install_page (upage, kpage, writable)) 
-        {
-          palloc_free_page (kpage);
-          return false; 
-        }     
-        
-      } else {
-        
-        /* Check if writable flag for the page should be updated */
-        if(writable && !pagedir_is_writable(t->pagedir, upage)){
-          pagedir_set_writable(t->pagedir, upage, writable); 
-        }
-        
+          
+      /* LAZY LOADING */
+      struct spt_entry *spe = malloc(sizeof(struct spt_entry));
+      spe->upage = upage;
+      spe->writable = writable;
+      spe->page_read_bytes = page_read_bytes;
+      spe->absolute_off = ofs + PGSIZE * pg_num;
+      if (page_read_bytes == 0)
+      {
+        spe->data_pt = NULL;
+        spe->location = ALL_ZERO;
+      } else
+      {
+        spe->data_pt = file;
+        spe->location = FILESYS;
       }
-
-      /* Load data into the page. */
-      if (file_read (file, kpage, page_read_bytes) != (int) page_read_bytes){
-        return false; 
-      }
-      memset (kpage + page_read_bytes, 0, page_zero_bytes);
+      
+      hash_insert(&thread_current()->sp_table, &spe->elem);
 
       /* Advance. */
       read_bytes -= page_read_bytes;
       zero_bytes -= page_zero_bytes;
       upage += PGSIZE;
+      pg_num++;
     }
   return true;
 }

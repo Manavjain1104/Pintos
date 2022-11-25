@@ -49,7 +49,7 @@ free_frame(struct hash *frame_table, void *kva)
 
 static unsigned frame_hash_func(const struct hash_elem *e, void *aux UNUSED)
 {
-    return ((unsigned) (hash_entry(e, struct frame_entry, elem) -> kva)) % NUM_BUCKETS;
+    return ((unsigned) (hash_entry(e, struct frame_entry, elem) -> kva));
 }
 
 static bool frame_less_func (const struct hash_elem *a, 

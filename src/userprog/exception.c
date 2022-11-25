@@ -6,12 +6,16 @@
 #include "userprog/gdt.h"
 #include "threads/interrupt.h"
 #include "threads/thread.h"
+#include "threads/palloc.h"
+#include "threads/vaddr.h"
+#include "vm/spt.h"
 
 /* Number of page faults processed. */
 static long long page_fault_cnt;
 
 static void kill (struct intr_frame *);
 static void page_fault (struct intr_frame *);
+static bool actual_load_page(struct spt_entry *spe);
 
 /* Registers handlers for interrupts that can be caused by user
    programs.
@@ -165,3 +169,90 @@ page_fault (struct intr_frame *f)
   kill (f);
 }
 
+static bool 
+actual_load_page(struct spt_entry *spe)
+{  
+   // TODO : SPT ENTRY FREE DONT FORGET
+
+   /* Check if virtual page already allocated */
+      struct thread *t = thread_current ();
+
+      if (spe->location == ALL_ZERO)
+      {
+         get_and_install_page(PAL_USER | PAL_ZERO, )
+      }
+
+      uint8_t *kpage = pagedir_get_page (t->pagedir, spe->upage);
+      
+      if (kpage == NULL)
+      {
+        /* Get a new page of memory. */
+        kpage = palloc_get_page (PAL_USER);
+        if (kpage == NULL)
+        {
+          return false;
+        }
+        
+        /* Add the page to the process's address space. */
+        if (!install_page (spe->upage, kpage, spe->writable)) 
+        {
+          palloc_free_page (kpage);
+          return false; 
+        }     
+        
+      } else 
+      {  
+        /* Check if writable flag for the page should be updated */
+        if(spe->writable && !pagedir_is_writable(t->pagedir, spe->upage))
+         {
+          pagedir_set_writable(t->pagedir, spe->upage, spe->writable); 
+         }
+      }
+
+      /* Load data into the page. */
+      struct file *fp = (struct file *) spe->data_pt;
+      lock_acquire(&file_lock);
+      file_seek(fp, spe->absolute_off);
+      if (file_read (fp, kpage, spe->page_read_bytes) 
+            != (int) spe->page_read_bytes)
+      {
+         lock_release(&file_lock);
+         return false;
+      }
+      lock_release(&file_lock);
+      memset (kpage + spe->page_read_bytes, 0, PGSIZE - spe->page_read_bytes);
+}
+
+static uint8_t *
+get_and_install_page(enum palloc_flags flags, 
+                     void *upage, 
+                     uint32_t *pagedir, 
+                     bool writable)
+{
+   uint8_t *kpage = pagedir_get_page (pagedir, upage);
+
+   if (kpage == NULL)
+   {
+     /* Get a new page of memory. */
+     kpage = palloc_get_page (PAL_USER);
+     if (kpage == NULL)
+     {
+       return NULL;
+     }
+     
+     /* Add the page to the process's address space. */
+     if (!install_page (upage, kpage, writable)) 
+     {
+       palloc_free_page (kpage);
+       return NULL; 
+     }     
+   } else 
+   {  
+     /* Check if writable flag for the page should be updated */
+     if(writable && !pagedir_is_writable(pagedir, upage))
+      {
+       pagedir_set_writable(pagedir, upage, writable); 
+      }
+   }
+   return kpage;
+}
