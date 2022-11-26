@@ -474,6 +474,11 @@ load_segment (off_t ofs, uint8_t *upage,
   ASSERT (ofs % PGSIZE == 0);
 
   int pg_num = 0;
+  // printf("GOT READ BYTES %u\n", read_bytes);
+  // printf("UPAGE %p\n", upage);
+  // printf("ofs %u\n", ofs);
+  // printf("-------\n");
+  size_t last_page_read_bytes = 0;
   while (read_bytes > 0 || zero_bytes > 0) 
     {
       /* Calculate how to fill this page.
@@ -487,15 +492,23 @@ load_segment (off_t ofs, uint8_t *upage,
       spe->upage = upage;
       spe->writable = writable;
       spe->page_read_bytes = page_read_bytes;
-      spe->absolute_off = ofs + PGSIZE * pg_num;
+      spe->absolute_off = ofs + last_page_read_bytes;
       spe->location = (page_read_bytes == 0) ? ALL_ZERO : FILE_SYS;
       
-      hash_insert(&thread_current()->sp_table, &spe->elem);
+      struct hash_elem *he = hash_insert(&thread_current()->sp_table, &spe->elem);
+
+      if (he)
+      {
+        // this means an equal element is already in the hash table
+        ASSERT (hash_delete(&thread_current()->sp_table, he));
+        hash_insert(&thread_current()->sp_table, &spe->elem);
+      }
 
       /* Advance. */
       read_bytes -= page_read_bytes;
       zero_bytes -= page_zero_bytes;
       upage += PGSIZE;
+      last_page_read_bytes += page_read_bytes;
       pg_num++;
     }
   return true;

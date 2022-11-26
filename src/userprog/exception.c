@@ -179,13 +179,16 @@ page_fault (struct intr_frame *f)
       struct hash spt = thread_current()->sp_table;
       struct spt_entry fake_entry;
       fake_entry.upage = pg_round_down(fault_addr);
-      printf("FAULTING UPAGE: %p %p\n", fake_entry.upage, fault_addr);
+
+      // printf("EIP: %p\n", f->eip);      
+
+      // printf("FAULTING UPAGE: %p  fault_addr:%p\n", fake_entry.upage, fault_addr);
       struct hash_elem *found = hash_find (&spt, &fake_entry.elem);
 
       if (!found)
       {
          // user tried to access data that shouldn't be there
-         printf("SPE ENTRY NOT FOUND \n");
+         // printf("SPE ENTRY NOT FOUND \n");
          goto failure;
       }
 
@@ -210,7 +213,7 @@ page_fault (struct intr_frame *f)
          ASSERT (spe->location == SWAP_SLOT);
          swap_in (spe->upage, spe->swap_slot);
       }
-   f->eip = fault_addr;  // TODO: check this with mark
+   // f->eip = fault_addr;  // TODO: check this with mark
    return;
    }
 
@@ -258,7 +261,7 @@ actual_load_page(struct spt_entry *spe)
    /* Load data into the page. */
    struct file *fp = t->exec_file;
    lock_acquire(&file_lock);
-   printf("file_length is %u and abs-off is %u and read bytes %u\n", file_length(fp), spe->absolute_off, spe->page_read_bytes);
+   // printf("file_length is %u and abs-off is %u and read bytes %u\n", file_length(fp), spe->absolute_off, spe->page_read_bytes);
    file_seek(fp, spe->absolute_off);
    off_t s;
    if ((s = file_read (fp, kpage, spe->page_read_bytes)) 
