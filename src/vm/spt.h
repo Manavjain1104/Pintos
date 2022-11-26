@@ -9,7 +9,8 @@ enum data_location_flags
     RAM,   
     SWAP_SLOT,      
     FILE_SYS,
-    ALL_ZERO 
+    ALL_ZERO,
+    STACK
   };
 
 struct spt_entry {

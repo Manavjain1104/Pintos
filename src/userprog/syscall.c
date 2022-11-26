@@ -77,6 +77,9 @@ syscall_handler (struct intr_frame *f)
   /* Setting sys_cal flag */
   thread_current()->in_sys_call = true;
 
+  /* Saving stack pointer on user to kernel transition */
+  thread_current()->stack_pt = f->esp;
+
   /* Verifying and reading value at esp */
   int sys_call_num = get_word(f->esp);
 

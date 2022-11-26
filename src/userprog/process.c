@@ -530,6 +530,15 @@ setup_stack (void **esp, char *fn_copy, char *saveptr)
       *esp = PHYS_BASE;
       if (success) {
 
+        /* Establishing initial stack page for current thread */
+        thread_current() -> cur_stack_pages++;
+        struct spt_entry * spe = malloc(sizeof(struct spt_entry));
+        spe -> upage = ((uint8_t *) PHYS_BASE) - PGSIZE;
+        spe -> location = STACK;
+        spe -> writable = true;
+        hash_insert(&thread_current()->sp_table, &spe->elem);
+
+
         /* Total bytes required for stack setup */
         unsigned total_bytes = strlen(fn_copy) + 1;
 

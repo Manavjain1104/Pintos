@@ -12,6 +12,8 @@
 #include "devices/swap.h"
 #include "lib/string.h"
 #include "userprog/pagedir.h"
+#include "threads/malloc.h"
+
 
 /* Number of page faults processed. */
 static long long page_fault_cnt;
@@ -132,11 +134,13 @@ kill (struct intr_frame *f)
    [IA32-v3a] section 5.15 "Exception and Interrupt Reference". */
 static void
 page_fault (struct intr_frame *f) 
-{
+{ 
   bool not_present;  /* True: not-present page, false: writing r/o page. */
   bool write;        /* True: access was write, false: access was read. */
   bool user;         /* True: access by user, false: access by kernel. */
   void *fault_addr;  /* Fault address. */
+  
+  void *esp;         /* User Stack Pointer */
 
   /* Obtain faulting address, the virtual address that was
      accessed to cause the fault.  It may point to code or to
@@ -159,12 +163,67 @@ page_fault (struct intr_frame *f)
   write = (f->error_code & PF_W) != 0;
   user = (f->error_code & PF_U) != 0; 
 
+  if (!is_user_vaddr(fault_addr))
+  {
+    goto failure;
+  }
+  if (user)
+  {
+    esp = f->esp;
+  }
+  else 
+  {
+    if (thread_current()->in_sys_call)
+    {
+        esp = thread_current()->stack_pt;
+    }
+  }
+
+   void *next_upage = pg_round_down(fault_addr);
+  /* Checking for stack fault*/
+  if(esp)
+  {
+      ASSERT(esp);
+      if ((fault_addr >= esp - 32))
+      {
+         // printf("%u\n\n", thread_current()->cur_stack_pages);
+         /* Checking for overflow of stack pages */
+         if (thread_current()->cur_stack_pages == STACK_MAX_PAGES)
+         {
+            printf("Reached stack page limit\n");
+            goto failure;
+         }
+         uint8_t *k_new_page = get_and_install_page(PAL_USER | PAL_ZERO, 
+                              next_upage, 
+                              thread_current()->pagedir, 
+                              true);
+         
+         if (!k_new_page)
+         {
+            printf("Cound not allocate new page for stack\n");
+            goto failure;
+         }
+
+
+         /* Making the SPT entry for this page */
+        struct spt_entry * spe = malloc(sizeof(struct spt_entry));
+        spe -> upage = next_upage;
+        spe -> location = STACK;
+        spe -> writable = true;
+        hash_insert(&thread_current()->sp_table, &spe->elem);
+
+        thread_current()->cur_stack_pages++;
+        return;
+      }
+  }
+
+
   /* Handle page_faults gracefully for user invalid access. */
   if (thread_current()->in_sys_call) 
   {
-   f->eip = (void *) f->eax;
-   f->eax = 0xffffffff;
-   return;
+    f->eip = (void *) f->eax;
+    f->eax = 0xffffffff;
+    return;
   }
 
   if (!is_user_vaddr(fault_addr))
@@ -291,7 +350,7 @@ get_and_install_page(enum palloc_flags flags,
      /* Get a new page of memory. */
      kpage = palloc_get_page (flags);
      if (kpage == NULL)
-     {
+     {   
        return NULL;
      }
      
