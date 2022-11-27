@@ -168,7 +168,7 @@ page_fault (struct intr_frame *f)
   {
    esp = f->esp;
    if (!is_user_vaddr(fault_addr))
-   {
+   {  
       goto failure;
    }
   } else 
@@ -186,10 +186,11 @@ page_fault (struct intr_frame *f)
       ASSERT(esp);
       // printf("GOT HERE \n");
       /* Handle page_faults gracefully for user invalid access. */
-      if (thread_current()->in_sys_call) 
-      {
-        goto failure;
-      }
+      // if (thread_current()->in_sys_call) 
+      // {  
+      //    // printf("2\n");
+      //    goto failure;
+      // }
 
       if ((fault_addr >= esp - 32))
       {
@@ -225,11 +226,11 @@ page_fault (struct intr_frame *f)
       }
   }
 
-  if (!is_user_vaddr(fault_addr))
-  {   
-     // process tried to access kernel page
-     goto failure;
-  }
+//   if (!is_user_vaddr(fault_addr))
+//   {   
+//      // process tried to access kernel page
+//      goto failure;
+//   }
 
   /* check validity of page in spt if page was not present */
   if (not_present)

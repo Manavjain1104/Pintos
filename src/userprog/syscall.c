@@ -351,7 +351,6 @@ write_handler(struct intr_frame *f UNUSED)
     int byte = get_byte((const uint8_t *)buffer + i);
     if (byte == -1)
     {
-      // printf("NEG BYTE \n");
       delete_thread(-1);
     }
     temp_buffer[i] = (uint8_t) byte;
