@@ -4,6 +4,7 @@
 #include "filesys/file.h"
 #include "threads/vaddr.h"
 #include "threads/thread.h"
+#include "userprog/pagedir.h"
 #include "lib/kernel/list.h"
 
 static unsigned page_mmap_hash_func(const struct hash_elem *e, void *aux UNUSED);
@@ -27,10 +28,16 @@ bool generate_mmap_tables(struct hash *page_mmap_table,
                      file_mmap_less_func, NULL); 
 }
 
-int get_page_fd(struct hash *page_mmap_table,
-                struct hash *file_mmap_table, void *upage)
+struct page_mmap_entry *get_mmap_page(struct hash *page_mmap_table, void *upage)
 {
-    return -1;
+    struct page_mmap_entry fake_pentry;
+    fake_pentry.uaddr = upage;
+    struct hash_elem *pentry_he = hash_find(page_mmap_table, &fake_pentry.helem);
+    if (!pentry_he)
+    {
+        return NULL;
+    }
+    return hash_entry(pentry_he, struct page_mmap_entry, helem);
 }
 
 mapid_t insert_mmap(struct hash *page_mmap_table, struct hash *file_mmap_table,
@@ -38,7 +45,7 @@ mapid_t insert_mmap(struct hash *page_mmap_table, struct hash *file_mmap_table,
 {
     struct file_mmap_entry *fentry = malloc(sizeof(struct file_mmap_entry));
     fentry->mapping = allocate_mapid();
-    fentry->fd = fd_obj->fd;
+    fentry->file_pt = file_reopen(fd_obj->file_pt);
     
     struct list *map_entries = malloc(sizeof(struct list));
     list_init(map_entries);
@@ -49,6 +56,7 @@ mapid_t insert_mmap(struct hash *page_mmap_table, struct hash *file_mmap_table,
         pentry->uaddr = (void *) i;
         pentry->written = false;
         pentry->fentry = fentry;
+        pentry->offset = i - (unsigned) uaddr;
         list_push_back(map_entries, &pentry->lelem);
         struct hash_elem *old_he = hash_insert(page_mmap_table, &pentry->helem);
         ASSERT(!old_he);
@@ -77,12 +85,16 @@ void unmap_entry(struct hash *page_mmap_table, struct hash *file_mmap_table,
         ASSERT(!hash_delete(page_mmap_table, &pentry->helem));
         if (pentry->written)
         {
-            ASSERT(false);
+            struct file *fp = pentry->fentry->file_pt;
+            file_seek (fp, pentry->offset);
+            /* TODO: check if correct to load entire page */
+            file_write (fp, pagedir_get_page(thread_current()->pagedir, pentry->uaddr), PGSIZE);
         }
         e = list_next(e);
         free(pentry);
     }
     ASSERT(!hash_delete(file_mmap_table, &fentry->elem));
+    file_close(fentry->file_pt);
     free(fentry->page_mmap_entries);
     free(fentry);
 }

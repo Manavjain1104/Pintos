@@ -26,7 +26,6 @@ static bool put_byte (uint8_t *udst, uint8_t byte);
 static int allocate_fd (void);
 static struct fd_st *get_fd (int fd);
 static bool validate_filename(const uint8_t * word);
-static bool validate_buffer(const uint8_t * word, size_t size);
 
 /* Struct to store child-parent relationship */
 struct lock file_lock; 
@@ -290,7 +289,7 @@ read_handler(struct intr_frame *f)
       || size < 0  
       || buffer == -1
       || fd == STDOUT_FILENO
-      || !validate_buffer((const uint8_t *) buffer, size))
+      || !is_user_vaddr((void *) buffer))
   {
     delete_thread(-1);
   }
@@ -327,7 +326,6 @@ read_handler(struct intr_frame *f)
 
   free(temp_buf);
   f->eax = actual_read;
-
 }
 
 void
@@ -339,8 +337,7 @@ write_handler(struct intr_frame *f UNUSED)
 
   if (fd <= STDIN_FILENO 
       || size < 0 
-      || buffer == -1
-      || !validate_buffer((const uint8_t *) buffer, size))
+      || buffer == -1)
   { 
     delete_thread(-1);
   }
@@ -349,7 +346,12 @@ write_handler(struct intr_frame *f UNUSED)
   uint8_t *temp_buffer = malloc(size * sizeof(uint8_t));
   for (int i = 0; i < size; i++)
   { 
-    temp_buffer[i] = (uint8_t) get_byte((const uint8_t *)buffer + i);
+    int byte = get_byte((const uint8_t *) buffer + i);
+    if (byte == -1)
+    {
+      delete_thread(-1);
+    }
+    temp_buffer[i] = (uint8_t) byte;
   }
   
   if (fd == STDOUT_FILENO) 
@@ -382,6 +384,23 @@ write_handler(struct intr_frame *f UNUSED)
   /* Write out to file */
   f->eax = file_write(fd_obj->file_pt, temp_buffer, size);
   lock_release(&file_lock);
+
+  if (size == 0)
+  {
+    f->eax = -1;
+    return;
+  }
+
+  /* Set written flag of relevant pages to true */
+  for (unsigned i = (unsigned) pg_round_down((void *) buffer); i <= pg_round_down((void *) (buffer + size)); i += PGSIZE)
+  {
+    struct page_mmap_entry fake_mmap_page_entry;
+    fake_mmap_page_entry.uaddr = (void *) i;
+    struct hash_elem *mmap_pentry = hash_find(&thread_current()->page_mmap_table, &fake_mmap_page_entry.helem);
+    if (mmap_pentry) {
+      hash_entry(mmap_pentry, struct page_mmap_entry, helem)->written = true;
+    }
+  }
 
   free(temp_buffer);
 }
@@ -531,16 +550,6 @@ validate_filename(const uint8_t * word)
   return byte != -1;
 }
 
-static bool
-validate_buffer(const uint8_t * word, size_t size)
-{
-  if (((unsigned) word - size) > USER_STACK_LOWER_BOUND
-      || (unsigned) word < USER_STACK_LOWER_BOUND) {
-        return get_byte(word) != -1;
-  }
-  return false;
-}
-
 void
 mmap_handler(struct intr_frame *f)
 {
@@ -575,7 +584,7 @@ mmap_handler(struct intr_frame *f)
   {
     if (pagedir_get_page(t->pagedir, (void *) i) != NULL
        || contains_upage(&t->sp_table, (void *) i)
-       || get_page_fd(&t->page_mmap_table, &t->file_mmap_table, (void *) i) != -1)
+       || get_mmap_page(&t->page_mmap_table, (void *) i) != NULL)
     {
       f->eax = -1;
       return;
