@@ -318,8 +318,11 @@ read_handler(struct intr_frame *f)
   lock_release(&file_lock);
 
   for (int i = 0; i < actual_read; i++)
-  {
-    put_byte((uint8_t *)buffer + i, temp_buf[i]);
+  { 
+    if (!put_byte((uint8_t *)buffer + i, temp_buf[i]))
+    {
+      delete_thread(-1);
+    }
   }
 
   free(temp_buf);
