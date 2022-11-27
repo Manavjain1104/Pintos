@@ -12,6 +12,10 @@
 #include "threads/malloc.h"
 #include "devices/shutdown.h"
 #include "devices/input.h"
+#include "lib/stdio.h"
+#include "userprog/pagedir.h"
+#include "vm/spt.h"
+#include "vm/mmap.h"
 
 static void syscall_handler (struct intr_frame *);
 static int get_word (const uint8_t *uaddr);
@@ -44,6 +48,8 @@ syscall_handler_func write_handler;
 syscall_handler_func seek_handler;
 syscall_handler_func tell_handler;
 syscall_handler_func close_handler;
+syscall_handler_func mmap_handler;
+syscall_handler_func munmap_handler;
 
 /* Array of syscall structs respective system calls */
 static syscall_handler_func *handlers[NUM_SYS_CALLS];
@@ -68,7 +74,9 @@ syscall_init (void)
   handlers[SYS_WRITE] = &write_handler;               
   handlers[SYS_SEEK] = &seek_handler;                   
   handlers[SYS_TELL] = &tell_handler;                    
-  handlers[SYS_CLOSE] = &close_handler;  
+  handlers[SYS_CLOSE] = &close_handler;
+  handlers[SYS_MMAP] = &mmap_handler;
+  handlers[SYS_MUNMAP] = &munmap_handler;
 }
 
 static void
@@ -80,7 +88,7 @@ syscall_handler (struct intr_frame *f)
   /* Verifying and reading value at esp */
   int sys_call_num = get_word(f->esp);
 
-  if (sys_call_num < 0 && sys_call_num < SYS_HANDLERS_SIZE)
+  if (sys_call_num < 0 || sys_call_num >= NUM_SYS_CALLS)
   {
     delete_thread(-1);
   }
@@ -531,4 +539,62 @@ validate_buffer(const uint8_t * word, size_t size)
         return get_byte(word) != -1;
   }
   return false;
+}
+
+void
+mmap_handler(struct intr_frame *f)
+{
+  int fd = get_word(f->esp + sizeof(void *));
+  int addr = get_word(f->esp + sizeof(void *) * 2);
+  struct fd_st *fd_obj;
+  int flength = 0;
+  void *last_page = pg_round_down((void *) (addr + flength));
+
+  // TODO: macro for -1
+  lock_acquire(&file_lock);
+  if (fd == -1
+      || addr <= 0
+      || ((unsigned) addr) % PGSIZE != 0
+      || fd == STDIN_FILENO
+      || fd == STDOUT_FILENO
+      || ((fd_obj = get_fd(fd)) == NULL)
+      || (flength = file_length(fd_obj->file_pt)) == 0
+      || !is_user_vaddr((void *) addr)
+      || !is_user_vaddr(last_page))
+  {
+        lock_release(&file_lock);
+        f->eax = -1;
+        return;
+  }
+  lock_release(&file_lock);
+
+  struct thread *t = thread_current();
+
+  /* Check for any memory page overlaps */
+  for (unsigned i = (unsigned) addr; i <= (unsigned) last_page; i += PGSIZE)
+  {
+    if (pagedir_get_page(t->pagedir, (void *) i) != NULL
+       || contains_upage(&t->sp_table, (void *) i)
+       || get_page_fd(&t->page_mmap_table, &t->file_mmap_table, (void *) i) != -1)
+    {
+      f->eax = -1;
+      return;
+    }
+  }
+
+  f->eax = insert_mmap(&t->page_mmap_table, &t->file_mmap_table, (void *) addr, fd_obj);
+}
+
+void
+munmap_handler(struct intr_frame *f)
+{
+  int mapping = get_word(f->esp + sizeof(void *));
+  if (mapping == -1)
+  {
+    f->eax = -1;
+    return;
+  }
+
+  struct thread *t = thread_current();
+  unmap_entry(&t->page_mmap_table, &t->file_mmap_table, mapping);
 }

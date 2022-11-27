@@ -117,6 +117,11 @@ struct thread
     uint32_t *pagedir;                  /* Page directory. */
 
     struct hash sp_table;              /* supplemental page table */
+
+    struct hash page_mmap_table;        /* Page hash table for memory
+                                           mapped files */
+    struct hash file_mmap_table;        /* File hash table for memory
+                                            mapped files */
     
     /* to allow thread to be part of children list in 
     parent process thread */

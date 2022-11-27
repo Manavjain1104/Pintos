@@ -12,11 +12,11 @@
 #include "threads/switch.h"
 #include "threads/synch.h"
 #include "threads/vaddr.h"
-#ifdef USERPROG
+// #ifdef USERPROG
 #include "userprog/process.h"
 #include "userprog/syscall.h"
 #include "filesys/file.h"
-#endif
+// #endif
 
 /* Random value for struct thread's `magic' member.
    Used to detect stack overflow.  See the big comment at the top
@@ -146,12 +146,12 @@ thread_tick (void) {
     idle_ticks++;
   }
     
-#ifdef USERPROG
+// #ifdef USERPROG
   else if (t->pagedir != NULL)
   {
     user_ticks++;
   }
-#endif
+// #endif
   else
   {
     kernel_ticks++;
@@ -255,7 +255,7 @@ thread_create (const char *name, int priority,
   sf->ebp = 0;
 
 
-  #ifdef USERPROG
+  // #ifdef USERPROG
   /* Establishing a baby sitter for THREAD 't' in the parent */
   struct baby_sitter *bs 
     = (struct baby_sitter *) malloc(sizeof(struct baby_sitter));
@@ -266,7 +266,7 @@ thread_create (const char *name, int priority,
   bs->child_tid = tid;
   t->nanny = bs;
   list_push_back(&thread_current()->baby_sitters, &bs->elem);
-  #endif
+  // #endif
 
   intr_set_level (old_level);
 
@@ -360,9 +360,9 @@ thread_exit (void)
 {
   ASSERT (!intr_context ());
 
-#ifdef USERPROG
+// #ifdef USERPROG
   process_exit ();    // frees up resources
-#endif
+// #endif
 
   /* Remove thread from all threads list, set our status to dying,
      and schedule another process.  That process will destroy us
@@ -826,10 +826,10 @@ thread_schedule_tail (struct thread *prev)
   /* Start new time slice. */
   thread_ticks = 0;
 
-#ifdef USERPROG
+// #ifdef USERPROG
   /* Activate the new address space. */
   process_activate ();
-#endif
+// #endif
 
   /* If the thread we switched from is dying, destroy its struct
      thread.  This must happen late so that thread_exit() doesn't

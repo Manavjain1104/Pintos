@@ -19,6 +19,13 @@ insert_spe(struct hash *spt_table, struct spt_entry *spe)
     ASSERT(he);
 }
 
+bool contains_upage(struct hash *spt_table, void *upage)
+{
+    struct spt_entry fake_spe;
+    fake_spe.upage = upage;
+    return hash_find(spt_table, &fake_spe.elem) != NULL;
+}
+
 void 
 free_entry(struct hash *spt_table, void *upage)
 {

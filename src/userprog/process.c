@@ -21,6 +21,7 @@
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 #include "vm/spt.h"
+#include "vm/mmap.h"
 
 static thread_func start_process NO_RETURN;
 static bool load (char *cmdline, void (**eip) (void), void **esp);
@@ -185,6 +186,8 @@ process_exit (void)
   
   /* destroy supplemental page_table */
   destroy_spt_table(&cur->sp_table);
+
+  destroy_mmap_tables();
 }
 
 /* Sets up the CPU for running user code in the current
@@ -292,8 +295,12 @@ load (char *file_name, void (**eip) (void), void **esp)
     goto done;
   process_activate ();
 
+  // TODO: check if the two calls below not successful
   /* supplemental page table intialisation */
   generate_spt_table(&t->sp_table);
+
+  /* Memory mapped files table initialization */
+  generate_mmap_tables(&t->page_mmap_table, &t->file_mmap_table);
 
   /* Parsing the file name from the fn_copy */
   char *saveptr;
