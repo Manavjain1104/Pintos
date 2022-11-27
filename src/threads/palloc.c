@@ -45,7 +45,11 @@ static void init_pool (struct pool *, void *base, size_t page_cnt,
                        const char *name);
 static bool page_from_pool (const struct pool *, void *page);
 
+/* stroing meta data about the memory frames */
 struct hash frame_table;
+
+/* synchronising frame table accesses */
+struct lock frame_lock;
 
 /* Initializes the page allocator.  At most USER_PAGE_LIMIT
    pages are put into the user pool. */
@@ -75,6 +79,8 @@ palloc_init (size_t user_page_limit)
 
   /* initialise the swap space */
   swap_init();
+
+  lock_init(&frame_lock);
 }
 
 /* Obtains and returns a group of PAGE_CNT contiguous free pages.
@@ -127,10 +133,14 @@ void *
 palloc_get_page (enum palloc_flags flags) 
 {
   void *kva =  palloc_get_multiple (flags, 1);
+
+  // lock_acquire(&frame_lock);
+
   if (flags & PAL_USER)
   {
     if (kva == NULL)
     {
+      // lock_release(&frame_lock);
       return NULL; // TODO
       /* evict and already existing frame and change its page reference */
       // struct frame_entry * old_frame_pt = evict_frame(&frame_table);
@@ -146,6 +156,7 @@ palloc_get_page (enum palloc_flags flags)
     frame_pt -> kva = kva;
     insert_frame(&frame_table, frame_pt);
   }
+  // lock_release(&frame_lock);
 
   return kva;
 }
@@ -182,7 +193,12 @@ palloc_free_multiple (void *pages, size_t page_cnt)
 void
 palloc_free_page (void *page) 
 {
-  free_frame(&frame_table, page);
+  // lock_acquire(&frame_lock);
+  if (page_from_pool (&user_pool, page))
+  { 
+    ASSERT(free_frame(&frame_table, page));
+  }
+  // lock_release(&frame_lock);
   palloc_free_multiple (page, 1);
 }
 

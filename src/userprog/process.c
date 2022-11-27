@@ -164,6 +164,10 @@ void
 process_exit (void)
 {
   struct thread *cur = thread_current ();
+
+  /* destroy supplemental page_table */
+  destroy_spt_table(&cur->sp_table);
+
   uint32_t *pd;
 
   /* Destroy the current process's page directory and switch back
@@ -182,9 +186,6 @@ process_exit (void)
       pagedir_activate (NULL);
       pagedir_destroy (pd);
     }
-  
-  /* destroy supplemental page_table */
-  destroy_spt_table(&cur->sp_table);
 }
 
 /* Sets up the CPU for running user code in the current
@@ -495,13 +496,15 @@ load_segment (off_t ofs, uint8_t *upage,
       spe->absolute_off = ofs + last_page_read_bytes;
       spe->location = (page_read_bytes == 0) ? ALL_ZERO : FILE_SYS;
       
-      struct hash_elem *he = hash_insert(&thread_current()->sp_table, &spe->elem);
+      struct hash_elem *he = insert_spe(&thread_current()->sp_table, spe);
 
       if (he)
       {
         // this means an equal element is already in the hash table
-        ASSERT (hash_delete(&thread_current()->sp_table, he));
-        hash_insert(&thread_current()->sp_table, &spe->elem);
+        update_spe(hash_entry(he, struct spt_entry, elem), spe);
+        free(spe);
+        // ASSERT (hash_delete(&thread_current()->sp_table, he));
+        // insert_spe(&thread_current()->sp_table, spe);
       }
 
       /* Advance. */

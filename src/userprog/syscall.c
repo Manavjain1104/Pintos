@@ -22,7 +22,7 @@ static bool put_byte (uint8_t *udst, uint8_t byte);
 static int allocate_fd (void);
 static struct fd_st *get_fd (int fd);
 static bool validate_filename(const uint8_t * word);
-static bool validate_buffer(const uint8_t * word, size_t size);
+// static bool validate_buffer(const uint8_t * word, size_t size);
 
 /* Struct to store child-parent relationship */
 struct lock file_lock; 
@@ -83,7 +83,7 @@ syscall_handler (struct intr_frame *f)
   /* Verifying and reading value at esp */
   int sys_call_num = get_word(f->esp);
 
-  if (sys_call_num < 0 && sys_call_num < SYS_HANDLERS_SIZE)
+  if (sys_call_num < 0 || sys_call_num > SYS_CLOSE)
   {
     delete_thread(-1);
   }
@@ -246,6 +246,7 @@ open_handler(struct intr_frame *f)
     }
     intr_set_level(old_level);
 
+    // printf("returning -1 \n");
     f->eax = -1;
     return;
   }
@@ -285,7 +286,8 @@ read_handler(struct intr_frame *f)
       || size < 0  
       || buffer == -1
       || fd == STDOUT_FILENO
-      || !validate_buffer((const uint8_t *) buffer, size))
+      || !is_user_vaddr((void *) buffer))
+     // || !validate_buffer((const uint8_t *) buffer, size)
   {
     delete_thread(-1);
   }
@@ -334,8 +336,7 @@ write_handler(struct intr_frame *f UNUSED)
 
   if (fd <= STDIN_FILENO 
       || size < 0 
-      || buffer == -1
-      || !validate_buffer((const uint8_t *) buffer, size))
+      || buffer == -1)
   { 
     delete_thread(-1);
   }
@@ -344,7 +345,13 @@ write_handler(struct intr_frame *f UNUSED)
   uint8_t *temp_buffer = malloc(size * sizeof(uint8_t));
   for (int i = 0; i < size; i++)
   { 
-    temp_buffer[i] = (uint8_t) get_byte((const uint8_t *)buffer + i);
+    int byte = get_byte((const uint8_t *)buffer + i);
+    if (byte == -1)
+    {
+      // printf("NEG BYTE \n");
+      delete_thread(-1);
+    }
+    temp_buffer[i] = (uint8_t) byte;
   }
   
   if (fd == STDOUT_FILENO) 
@@ -526,12 +533,12 @@ validate_filename(const uint8_t * word)
   return byte != -1;
 }
 
-static bool
-validate_buffer(const uint8_t * word, size_t size)
-{
-  if (((unsigned) word - size) > USER_STACK_LOWER_BOUND
-      || (unsigned) word < USER_STACK_LOWER_BOUND) {
-        return get_byte(word) != -1;
-  }
-  return false;
-}
+// static bool
+// validate_buffer(const uint8_t * word, size_t size)
+// {
+//   if (((unsigned) word - size) > USER_STACK_LOWER_BOUND
+//       || (unsigned) word < USER_STACK_LOWER_BOUND) {
+//         return get_byte(word) != -1;
+//   }
+//   return false;
+// }

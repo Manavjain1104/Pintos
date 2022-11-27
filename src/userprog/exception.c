@@ -140,7 +140,7 @@ page_fault (struct intr_frame *f)
   bool user;         /* True: access by user, false: access by kernel. */
   void *fault_addr;  /* Fault address. */
   
-  void *esp;         /* User Stack Pointer */
+  void *esp;     /* User Stack Pointer */
 
   /* Obtain faulting address, the virtual address that was
      accessed to cause the fault.  It may point to code or to
@@ -163,30 +163,37 @@ page_fault (struct intr_frame *f)
   write = (f->error_code & PF_W) != 0;
   user = (f->error_code & PF_U) != 0; 
 
-  if (!is_user_vaddr(fault_addr))
-  {
-    goto failure;
-  }
+
   if (user)
   {
-    esp = f->esp;
-  }
-  else 
+   esp = f->esp;
+   if (!is_user_vaddr(fault_addr))
+   {
+      goto failure;
+   }
+  } else 
   {
-    if (thread_current()->in_sys_call)
-    {
-        esp = thread_current()->stack_pt;
-    }
+   if (thread_current()->in_sys_call)
+   {
+      esp = thread_current()->stack_pt;
+   }
   }
 
-   void *next_upage = pg_round_down(fault_addr);
+  void *next_upage = pg_round_down(fault_addr);
   /* Checking for stack fault*/
   if(esp)
   {
       ASSERT(esp);
+      // printf("GOT HERE \n");
+      /* Handle page_faults gracefully for user invalid access. */
+      if (thread_current()->in_sys_call) 
+      {
+        goto failure;
+      }
+
       if ((fault_addr >= esp - 32))
       {
-         // printf("%u\n\n", thread_current()->cur_stack_pages);
+         // printf("fault_addr: %p esp:%p\n---\n", fault_addr, esp);
          /* Checking for overflow of stack pages */
          if (thread_current()->cur_stack_pages == STACK_MAX_PAGES)
          {
@@ -210,20 +217,12 @@ page_fault (struct intr_frame *f)
         spe -> upage = next_upage;
         spe -> location = STACK;
         spe -> writable = true;
-        hash_insert(&thread_current()->sp_table, &spe->elem);
+      //   hash_insert(&thread_current()->sp_table, &spe->elem);
+        insert_spe(&thread_current()->sp_table, spe);
 
         thread_current()->cur_stack_pages++;
         return;
       }
-  }
-
-
-  /* Handle page_faults gracefully for user invalid access. */
-  if (thread_current()->in_sys_call) 
-  {
-    f->eip = (void *) f->eax;
-    f->eax = 0xffffffff;
-    return;
   }
 
   if (!is_user_vaddr(fault_addr))
@@ -277,6 +276,14 @@ page_fault (struct intr_frame *f)
    }
 
  failure:
+   /* Handle page_faults gracefully for user invalid access. */
+   if (thread_current()->in_sys_call) 
+   {
+     f->eip = (void *) f->eax;
+     f->eax = 0xffffffff;
+     return;
+   }
+   
    printf ("Page fault at %p: %s error %s page in %s context.\n",
          fault_addr,
          not_present ? "not present" : "rights violation",
