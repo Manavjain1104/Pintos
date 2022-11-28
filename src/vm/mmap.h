@@ -8,7 +8,6 @@
 
 struct page_mmap_entry {
     void *uaddr;
-    bool written;
     struct file_mmap_entry *fentry;
     unsigned offset;
     struct hash_elem helem;

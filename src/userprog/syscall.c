@@ -385,20 +385,6 @@ write_handler(struct intr_frame *f UNUSED)
   f->eax = file_write(fd_obj->file_pt, temp_buffer, size);
   lock_release(&file_lock);
 
-  if (size != 0)
-  {
-    /* Set written flag of relevant pages to true */
-    for (unsigned i = (unsigned) pg_round_down((void *) buffer); i <= (unsigned) pg_round_down((void *) (buffer + size)); i += PGSIZE)
-    {
-      struct page_mmap_entry fake_mmap_page_entry;
-      fake_mmap_page_entry.uaddr = (void *) i;
-      struct hash_elem *mmap_pentry = hash_find(&thread_current()->page_mmap_table, &fake_mmap_page_entry.helem);
-      if (mmap_pentry) {
-        hash_entry(mmap_pentry, struct page_mmap_entry, helem)->written = true;
-      }
-    }
-  }
-
   free(temp_buffer);
 }
 

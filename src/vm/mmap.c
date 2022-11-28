@@ -55,7 +55,6 @@ mapid_t insert_mmap(struct hash *page_mmap_table, struct hash *file_mmap_table,
     for (unsigned i = (unsigned) uaddr; i <= last_page; i += PGSIZE) {
         struct page_mmap_entry *pentry = malloc(sizeof(struct page_mmap_entry));
         pentry->uaddr = (void *) i;
-        pentry->written = false;
         pentry->fentry = fentry;
         pentry->offset = i - (unsigned) uaddr;
         list_push_back(map_entries, &pentry->lelem);
@@ -86,7 +85,7 @@ void unmap_entry(struct hash *page_mmap_table, struct hash *file_mmap_table,
     {
         struct page_mmap_entry *pentry = list_entry(e, struct page_mmap_entry, lelem);
         ASSERT(hash_delete(page_mmap_table, &pentry->helem));      
-        if (pentry->written)
+        if (pagedir_is_dirty (thread_current ()->pagedir, pentry->uaddr))
         {
             struct file *fp = pentry->fentry->file_pt;
             file_seek (fp, pentry->offset);
