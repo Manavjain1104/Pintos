@@ -198,7 +198,7 @@ exec_handler(struct intr_frame *f)
 void
 exit_handler(struct intr_frame *f) 
 {
-  intr_disable();
+  enum intr_level old_level = intr_disable();
   struct baby_sitter *bs = thread_current()->nanny;
   thread_current()->exit_status = get_word(f->esp + sizeof(void *));
   if (bs != NULL)
@@ -206,6 +206,7 @@ exit_handler(struct intr_frame *f)
     //This means that parent is alive and might need visibility of exit_status
     bs->exit_status = thread_current()->exit_status;
   }
+  intr_set_level(old_level);
   thread_exit();
 }
 
@@ -506,12 +507,13 @@ get_fd (int fd)
 void delete_thread (int exit_stat) {
   thread_current()->exit_status = exit_stat;
 
-  intr_disable();
+  enum intr_level old_level = intr_disable();
   
   if (thread_current()->nanny != NULL)
   {
    thread_current()->nanny->exit_status = exit_stat;
   }
+  intr_set_level(old_level);
   thread_exit();
 }
 
