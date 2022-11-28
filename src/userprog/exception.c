@@ -172,7 +172,8 @@ page_fault (struct intr_frame *f)
     {  
       goto failure;
     }
-  } else 
+  } 
+  else 
   {
     if (thread_current()->in_sys_call)
     {
@@ -188,18 +189,18 @@ page_fault (struct intr_frame *f)
       fake_entry.upage = pg_round_down(fault_addr);
       struct hash_elem *found = hash_find (&spt, &fake_entry.elem);
 
-      /* use SPT data to handle page fault */
+      /* Use SPT data to handle page fault */
       if (found)
       {
-
         struct spt_entry *spe = hash_entry(found, struct spt_entry, elem);
+        
         if (!spe->writable && write)
         {
-         // user tried to write to a read only page
+          /* User tried to write to a read only page */ 
           goto failure;
         }
 
-        // code reaching here indicates that access was valid, load neccesary
+        /* Code reaching here indicates that access was valid, load neccesary */ 
         if (spe->location == FILE_SYS || spe->location == ALL_ZERO)
         {
             if (!actual_load_page(spe))
@@ -207,11 +208,13 @@ page_fault (struct intr_frame *f)
               printf("Failed to load spt page entry at addr: %p\n", fault_addr);
               goto failure;
             }
-        } else
+        } 
+        else
         {
-            // page must exist in a swap slot
+            /* Page must exist in a swap slot */
             ASSERT (spe->location == SWAP_SLOT);
-            swap_in (spe->upage, spe->swap_slot); // TODO : does this install also???  
+            // TODO : does this install also???
+            swap_in (spe->upage, spe->swap_slot);   
         }
       return;
       }
@@ -225,6 +228,7 @@ page_fault (struct intr_frame *f)
         {
            /* Checking for overflow of stack pages */
            void *next_upage = pg_round_down(fault_addr);
+
            // TODO Check with Mark why this is working
            if (next_upage - PHYS_BASE > STACK_MAX_SIZE)
            {
@@ -251,7 +255,6 @@ page_fault (struct intr_frame *f)
           return;
         }
       }
-
     }
  
  failure:
