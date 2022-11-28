@@ -28,7 +28,7 @@ struct page_mmap_entry *get_mmap_page(struct hash *page_mmap_table, void *upage)
 mapid_t insert_mmap(struct hash *page_mmap_table, struct hash *file_mmap_table,
                     void *uaddr, struct fd_st *fd_obj);
 void unmap_entry(struct hash *page_mmap_table, struct hash *file_mmap_table,
-                 mapid_t mapping);
+                 struct file_mmap_entry *fentry, bool delete_from_table);
 void destroy_mmap_tables(void);
 
 // TODO: write 

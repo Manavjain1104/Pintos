@@ -166,6 +166,11 @@ process_exit (void)
 {
   struct thread *cur = thread_current ();
   uint32_t *pd;
+      
+  /* destroy supplemental page_table */
+  destroy_spt_table(&cur->sp_table);
+
+  destroy_mmap_tables();
 
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
@@ -183,11 +188,6 @@ process_exit (void)
       pagedir_activate (NULL);
       pagedir_destroy (pd);
     }
-  
-  /* destroy supplemental page_table */
-  destroy_spt_table(&cur->sp_table);
-
-  destroy_mmap_tables();
 }
 
 /* Sets up the CPU for running user code in the current

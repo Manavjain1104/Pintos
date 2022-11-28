@@ -69,17 +69,8 @@ mapid_t insert_mmap(struct hash *page_mmap_table, struct hash *file_mmap_table,
 }
 
 void unmap_entry(struct hash *page_mmap_table, struct hash *file_mmap_table,
-                 mapid_t mapping)
+                 struct file_mmap_entry *fentry, bool delete_from_table)
 {
-    struct file_mmap_entry fake_fentry;
-    fake_fentry.mapping = mapping;
-    struct hash_elem *fentry_he = hash_find(file_mmap_table, &fake_fentry.elem);
-    // TODO: might have to handle this in other way
-    if (fentry_he == NULL) {
-        return;
-    }
-    struct file_mmap_entry *fentry = hash_entry(fentry_he, struct file_mmap_entry, elem);
-
     struct list_elem *e;
     for (e = list_begin (fentry->page_mmap_entries); e != list_end (fentry->page_mmap_entries);)
     {
@@ -95,7 +86,9 @@ void unmap_entry(struct hash *page_mmap_table, struct hash *file_mmap_table,
         e = list_next(e);
         free(pentry);
     }
-    ASSERT(hash_delete(file_mmap_table, &fentry->elem));
+    if (delete_from_table) {
+        hash_delete(file_mmap_table, &fentry->elem);
+    }
     file_close(fentry->file_pt);
     free(fentry->page_mmap_entries);
     free(fentry);
@@ -113,7 +106,7 @@ static void mmap_entry_free_func (struct hash_elem *e, void *aux UNUSED)
     struct thread *t = thread_current();
     unmap_entry(&t->page_mmap_table,
                 &t->file_mmap_table,
-                hash_entry(e, struct file_mmap_entry, elem)->mapping);
+                hash_entry(e, struct file_mmap_entry, elem), false);
 }
 
 static unsigned page_mmap_hash_func(const struct hash_elem *e,

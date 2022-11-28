@@ -586,7 +586,15 @@ munmap_handler(struct intr_frame *f)
     f->eax = -1;
     return;
   }
-
   struct thread *t = thread_current();
-  unmap_entry(&t->page_mmap_table, &t->file_mmap_table, mapping);
+
+  struct file_mmap_entry fake_fentry;
+  fake_fentry.mapping = mapping;
+  struct hash_elem *fentry_he = hash_find(&t->file_mmap_table, &fake_fentry.elem);
+  if (!fentry_he) {
+    return;
+  }
+  struct file_mmap_entry *fentry = hash_entry(fentry_he, struct file_mmap_entry, elem);
+
+  unmap_entry(&t->page_mmap_table, &t->file_mmap_table, fentry, true);
 }
