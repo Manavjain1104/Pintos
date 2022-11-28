@@ -1,5 +1,6 @@
 #include "mmap.h"
 #include "lib/user/syscall.h"
+#include <stdio.h>
 #include "threads/malloc.h"
 #include "filesys/file.h"
 #include "threads/vaddr.h"
@@ -64,7 +65,7 @@ mapid_t insert_mmap(struct hash *page_mmap_table, struct hash *file_mmap_table,
 
     fentry->page_mmap_entries = map_entries;
     struct hash_elem *old_fhe = hash_insert(file_mmap_table, &fentry->elem);
-    ASSERT(!old_fhe);
+    ASSERT(old_fhe == NULL);
     return fentry->mapping;
 }
 
@@ -75,7 +76,9 @@ void unmap_entry(struct hash *page_mmap_table, struct hash *file_mmap_table,
     fake_fentry.mapping = mapping;
     struct hash_elem *fentry_he = hash_find(file_mmap_table, &fake_fentry.elem);
     // TODO: might have to handle this in other way
-    ASSERT(fentry_he);
+    if (fentry_he == NULL) {
+        return;
+    }
     struct file_mmap_entry *fentry = hash_entry(fentry_he, struct file_mmap_entry, elem);
 
     struct list_elem *e;
