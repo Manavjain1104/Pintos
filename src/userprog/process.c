@@ -534,7 +534,6 @@ setup_stack (void **esp, char *fn_copy, char *saveptr)
       if (success) {
 
         /* Establishing initial stack page for current thread */
-        thread_current() -> cur_stack_pages++;
         struct spt_entry * spe = malloc(sizeof(struct spt_entry));
         spe -> upage = ((uint8_t *) PHYS_BASE) - PGSIZE;
         spe -> location = STACK;

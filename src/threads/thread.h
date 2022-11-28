@@ -29,7 +29,7 @@ typedef int tid_t;
 #define PRI_DEFAULT 31                  /* Default priority. */
 #define PRI_MAX 63                      /* Highest priority. */
 
-#define STACK_MAX_PAGES 2048   /* Maximum Number of Pages on the Stack*/
+#define STACK_MAX_SIZE 0x800000  /*Maximum Number of Pages on the Stack (8 MB)*/
 
 /* A kernel thread or user process.
 
@@ -139,9 +139,6 @@ struct thread
     /* executable file to keep track of which file to deny writes to */
     struct file *exec_file; 
 // #endif
-
-   /* Number of Stack Pages Allocated to the Thread as of Now */
-    int cur_stack_pages;
 
     /* Pointer to User Stack Frame for User Stack Growth */
     void *stack_pt;

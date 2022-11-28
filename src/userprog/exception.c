@@ -164,118 +164,96 @@ page_fault (struct intr_frame *f)
   user = (f->error_code & PF_U) != 0; 
 
 
+  /* setting user stack pointer and validating addr if user faulted */
   if (user)
   {
-   esp = f->esp;
-   if (!is_user_vaddr(fault_addr))
-   {  
+    esp = f->esp;
+    if (!is_user_vaddr(fault_addr))
+    {  
       goto failure;
-   }
+    }
   } else 
   {
-   if (thread_current()->in_sys_call)
-   {
+    if (thread_current()->in_sys_call)
+    {
       esp = thread_current()->stack_pt;
-   }
+    }
   }
 
-  void *next_upage = pg_round_down(fault_addr);
-  /* Checking for stack fault*/
-  if(esp)
-  {
-      ASSERT(esp);
-      // printf("GOT HERE \n");
-      /* Handle page_faults gracefully for user invalid access. */
-      // if (thread_current()->in_sys_call) 
-      // {  
-      //    // printf("2\n");
-      //    goto failure;
-      // }
-
-      if ((fault_addr >= esp - 32))
-      {
-         // printf("fault_addr: %p esp:%p\n---\n", fault_addr, esp);
-         /* Checking for overflow of stack pages */
-         if (thread_current()->cur_stack_pages == STACK_MAX_PAGES)
-         {
-            printf("Reached stack page limit\n");
-            goto failure;
-         }
-         uint8_t *k_new_page = get_and_install_page(PAL_USER | PAL_ZERO, 
-                              next_upage, 
-                              thread_current()->pagedir, 
-                              true);
-         
-         if (!k_new_page)
-         {
-            printf("Cound not allocate new page for stack\n");
-            goto failure;
-         }
-
-
-         /* Making the SPT entry for this page */
-        struct spt_entry * spe = malloc(sizeof(struct spt_entry));
-        spe -> upage = next_upage;
-        spe -> location = STACK;
-        spe -> writable = true;
-      //   hash_insert(&thread_current()->sp_table, &spe->elem);
-        insert_spe(&thread_current()->sp_table, spe);
-
-        thread_current()->cur_stack_pages++;
-        return;
-      }
-  }
-
-//   if (!is_user_vaddr(fault_addr))
-//   {   
-//      // process tried to access kernel page
-//      goto failure;
-//   }
-
-  /* check validity of page in spt if page was not present */
+  /* check SPT if page was not present */
   if (not_present)
-   {
+    {
       struct hash spt = thread_current()->sp_table;
       struct spt_entry fake_entry;
       fake_entry.upage = pg_round_down(fault_addr);
-
-      // printf("EIP: %p\n", f->eip);      
-
-      // printf("FAULTING UPAGE: %p  fault_addr:%p\n", fake_entry.upage, fault_addr);
       struct hash_elem *found = hash_find (&spt, &fake_entry.elem);
 
-      if (!found)
+      /* use SPT data to handle page fault */
+      if (found)
       {
-         // user tried to access data that shouldn't be there
-         // printf("SPE ENTRY NOT FOUND \n");
-         goto failure;
-      }
 
-      struct spt_entry *spe = hash_entry(found, struct spt_entry, elem);
-      if (!spe->writable && write)
-      {
+        struct spt_entry *spe = hash_entry(found, struct spt_entry, elem);
+        if (!spe->writable && write)
+        {
          // user tried to write to a read only page
-         goto failure;
+          goto failure;
+        }
+
+        // code reaching here indicates that access was valid, load neccesary
+        if (spe->location == FILE_SYS || spe->location == ALL_ZERO)
+        {
+            if (!actual_load_page(spe))
+            {  
+              printf("Failed to load spt page entry at addr: %p\n", fault_addr);
+              goto failure;
+            }
+        } else
+        {
+            // page must exist in a swap slot
+            ASSERT (spe->location == SWAP_SLOT);
+            swap_in (spe->upage, spe->swap_slot); // TODO : does this install also???  
+        }
+      return;
       }
 
-      // code reaching here indicates that access was valid, load neccesary
-      if (spe->location == FILE_SYS || spe->location == ALL_ZERO)
+      /* Checking for stack fault*/
+      if(esp)
       {
-         if (!actual_load_page(spe))
-         {
-            printf("Failed to load spt page entry at addr: %p\n", fault_addr);
-            goto failure;
-         }
-      } else
-      {
-         // page must exist in a swap slot
-         ASSERT (spe->location == SWAP_SLOT);
-         swap_in (spe->upage, spe->swap_slot);
-      }
-   // f->eip = fault_addr;  // TODO: check this with mark
-   return;
-   }
+        if ((fault_addr >= esp) 
+           || (fault_addr == esp - 32) 
+           || (fault_addr == esp - 4))
+        {
+           /* Checking for overflow of stack pages */
+           void *next_upage = pg_round_down(fault_addr);
+           // TODO Check with Mark why this is working
+           if (next_upage - PHYS_BASE > STACK_MAX_SIZE)
+           {
+              goto failure;
+           }
+           uint8_t *k_new_page = get_and_install_page(PAL_USER | PAL_ZERO, 
+                                next_upage, 
+                                thread_current()->pagedir, 
+                                true);
 
+           if (!k_new_page)
+           {
+              printf("Cound not allocate new page for stack\n");
+              goto failure;
+           }
+
+
+          /* Making the SPT entry for this page */
+          struct spt_entry * spe = malloc(sizeof(struct spt_entry));
+          spe -> upage = next_upage;
+          spe -> location = STACK;
+          spe -> writable = true;
+          insert_spe(&thread_current()->sp_table, spe);
+          return;
+        }
+      }
+
+    }
+ 
  failure:
    /* Handle page_faults gracefully for user invalid access. */
    if (thread_current()->in_sys_call) 

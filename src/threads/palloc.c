@@ -134,20 +134,14 @@ palloc_get_page (enum palloc_flags flags)
 {
   void *kva =  palloc_get_multiple (flags, 1);
 
-  // lock_acquire(&frame_lock);
 
   if (flags & PAL_USER)
   {
+    lock_acquire(&frame_lock);
     if (kva == NULL)
     {
-      // lock_release(&frame_lock);
+      lock_release(&frame_lock);
       return NULL; // TODO
-      /* evict and already existing frame and change its page reference */
-      // struct frame_entry * old_frame_pt = evict_frame(&frame_table);
-      // struct frame_entry new_frame;
-      // new_frame.owner = thread_current();
-      // update_entry(old_frame_pt, &new_frame);
-      // return old_frame_pt->kva;
     } 
 
     /* insert new entry into page table */
@@ -155,8 +149,8 @@ palloc_get_page (enum palloc_flags flags)
     frame_pt -> owner = thread_current();
     frame_pt -> kva = kva;
     insert_frame(&frame_table, frame_pt);
+    lock_release(&frame_lock);
   }
-  // lock_release(&frame_lock);
 
   return kva;
 }
@@ -184,7 +178,6 @@ palloc_free_multiple (void *pages, size_t page_cnt)
 #ifndef NDEBUG
   memset (pages, 0xcc, PGSIZE * page_cnt);
 #endif
-
   ASSERT (bitmap_all (pool->used_map, page_idx, page_cnt));
   bitmap_set_multiple (pool->used_map, page_idx, page_cnt, false);
 }
@@ -193,12 +186,12 @@ palloc_free_multiple (void *pages, size_t page_cnt)
 void
 palloc_free_page (void *page) 
 {
-  // lock_acquire(&frame_lock);
   if (page_from_pool (&user_pool, page))
   { 
+    lock_acquire(&frame_lock);
     ASSERT(free_frame(&frame_table, page));
+    lock_release(&frame_lock);
   }
-  // lock_release(&frame_lock);
   palloc_free_multiple (page, 1);
 }
 
