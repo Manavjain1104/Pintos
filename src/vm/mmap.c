@@ -82,7 +82,7 @@ void unmap_entry(struct hash *page_mmap_table, struct hash *file_mmap_table,
     for (e = list_begin (fentry->page_mmap_entries); e != list_end (fentry->page_mmap_entries);)
     {
         struct page_mmap_entry *pentry = list_entry(e, struct page_mmap_entry, lelem);
-        ASSERT(!hash_delete(page_mmap_table, &pentry->helem));
+        ASSERT(hash_delete(page_mmap_table, &pentry->helem));      
         if (pentry->written)
         {
             struct file *fp = pentry->fentry->file_pt;
@@ -93,7 +93,7 @@ void unmap_entry(struct hash *page_mmap_table, struct hash *file_mmap_table,
         e = list_next(e);
         free(pentry);
     }
-    ASSERT(!hash_delete(file_mmap_table, &fentry->elem));
+    ASSERT(hash_delete(file_mmap_table, &fentry->elem));
     file_close(fentry->file_pt);
     free(fentry->page_mmap_entries);
     free(fentry);

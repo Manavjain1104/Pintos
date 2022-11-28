@@ -388,7 +388,7 @@ write_handler(struct intr_frame *f UNUSED)
   if (size != 0)
   {
     /* Set written flag of relevant pages to true */
-    for (unsigned i = (unsigned) pg_round_down((void *) buffer); i <= pg_round_down((void *) (buffer + size)); i += PGSIZE)
+    for (unsigned i = (unsigned) pg_round_down((void *) buffer); i <= (unsigned) pg_round_down((void *) (buffer + size)); i += PGSIZE)
     {
       struct page_mmap_entry fake_mmap_page_entry;
       fake_mmap_page_entry.uaddr = (void *) i;
