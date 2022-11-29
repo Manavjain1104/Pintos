@@ -12,6 +12,10 @@
 #include "threads/malloc.h"
 #include "devices/shutdown.h"
 #include "devices/input.h"
+#include "lib/stdio.h"
+#include "userprog/pagedir.h"
+#include "vm/spt.h"
+#include "vm/mmap.h"
 
 static void syscall_handler (struct intr_frame *);
 static int get_word (const uint8_t *uaddr);
@@ -22,7 +26,6 @@ static bool put_byte (uint8_t *udst, uint8_t byte);
 static int allocate_fd (void);
 static struct fd_st *get_fd (int fd);
 static bool validate_filename(const uint8_t * word);
-// static bool validate_buffer(const uint8_t * word, size_t size);
 
 /* Struct to store child-parent relationship */
 struct lock file_lock; 
@@ -44,6 +47,8 @@ syscall_handler_func write_handler;
 syscall_handler_func seek_handler;
 syscall_handler_func tell_handler;
 syscall_handler_func close_handler;
+syscall_handler_func mmap_handler;
+syscall_handler_func munmap_handler;
 
 /* Array of syscall structs respective system calls */
 static syscall_handler_func *handlers[NUM_SYS_CALLS];
@@ -68,7 +73,9 @@ syscall_init (void)
   handlers[SYS_WRITE] = &write_handler;               
   handlers[SYS_SEEK] = &seek_handler;                   
   handlers[SYS_TELL] = &tell_handler;                    
-  handlers[SYS_CLOSE] = &close_handler;  
+  handlers[SYS_CLOSE] = &close_handler;
+  handlers[SYS_MMAP] = &mmap_handler;
+  handlers[SYS_MUNMAP] = &munmap_handler;
 }
 
 static void
@@ -83,7 +90,7 @@ syscall_handler (struct intr_frame *f)
   /* Verifying and reading value at esp */
   int sys_call_num = get_word(f->esp);
 
-  if (sys_call_num < 0 || sys_call_num > SYS_CLOSE)
+  if (sys_call_num < 0 || sys_call_num >= NUM_SYS_CALLS)
   {
     delete_thread(-1);
   }
@@ -194,7 +201,7 @@ exec_handler(struct intr_frame *f)
 void
 exit_handler(struct intr_frame *f) 
 {
-  intr_disable();
+  enum intr_level old_level = intr_disable();
   struct baby_sitter *bs = thread_current()->nanny;
   thread_current()->exit_status = get_word(f->esp + sizeof(void *));
   if (bs != NULL)
@@ -202,6 +209,7 @@ exit_handler(struct intr_frame *f)
     //This means that parent is alive and might need visibility of exit_status
     bs->exit_status = thread_current()->exit_status;
   }
+  intr_set_level(old_level);
   thread_exit();
 }
 
@@ -287,7 +295,6 @@ read_handler(struct intr_frame *f)
       || buffer == -1
       || fd == STDOUT_FILENO
       || !is_user_vaddr((void *) buffer))
-     // || !validate_buffer((const uint8_t *) buffer, size)
   {
     delete_thread(-1);
   }
@@ -327,7 +334,6 @@ read_handler(struct intr_frame *f)
 
   free(temp_buf);
   f->eax = actual_read;
-
 }
 
 void
@@ -508,12 +514,13 @@ get_fd (int fd)
 void delete_thread (int exit_stat) {
   thread_current()->exit_status = exit_stat;
 
-  intr_disable();
+  enum intr_level old_level = intr_disable();
   
   if (thread_current()->nanny != NULL)
   {
    thread_current()->nanny->exit_status = exit_stat;
   }
+  intr_set_level(old_level);
   thread_exit();
 }
 
@@ -535,12 +542,68 @@ validate_filename(const uint8_t * word)
   return byte != -1;
 }
 
-// static bool
-// validate_buffer(const uint8_t * word, size_t size)
-// {
-//   if (((unsigned) word - size) > USER_STACK_LOWER_BOUND
-//       || (unsigned) word < USER_STACK_LOWER_BOUND) {
-//         return get_byte(word) != -1;
-//   }
-//   return false;
-// }
+void
+mmap_handler(struct intr_frame *f)
+{
+  int fd = get_word(f->esp + sizeof(void *));
+  int addr = get_word(f->esp + sizeof(void *) * 2);
+  struct fd_st *fd_obj;
+  int flength = 0;
+  void *last_page = pg_round_down((void *) (addr + flength));
+
+  // TODO: macro for -1
+  lock_acquire(&file_lock);
+  if (fd == -1
+      || addr <= 0
+      || ((unsigned) addr) % PGSIZE != 0
+      || fd == STDIN_FILENO
+      || fd == STDOUT_FILENO
+      || ((fd_obj = get_fd(fd)) == NULL)
+      || (flength = file_length(fd_obj->file_pt)) == 0
+      || !is_user_vaddr((void *) addr)
+      || !is_user_vaddr(last_page))
+  {
+        lock_release(&file_lock);
+        f->eax = -1;
+        return;
+  }
+  lock_release(&file_lock);
+
+  struct thread *t = thread_current();
+
+  /* Check for any memory page overlaps */
+  for (unsigned i = (unsigned) addr; i <= (unsigned) last_page; i += PGSIZE)
+  {
+    if (pagedir_get_page(t->pagedir, (void *) i) != NULL
+       || contains_upage(&t->sp_table, (void *) i)
+       || get_mmap_page(&t->page_mmap_table, (void *) i) != NULL)
+    {
+      f->eax = -1;
+      return;
+    }
+  }
+
+  f->eax = insert_mmap(&t->page_mmap_table, &t->file_mmap_table, (void *) addr, fd_obj);
+}
+
+void
+munmap_handler(struct intr_frame *f)
+{
+  int mapping = get_word(f->esp + sizeof(void *));
+  if (mapping == -1)
+  {
+    f->eax = -1;
+    return;
+  }
+  struct thread *t = thread_current();
+
+  struct file_mmap_entry fake_fentry;
+  fake_fentry.mapping = mapping;
+  struct hash_elem *fentry_he = hash_find(&t->file_mmap_table, &fake_fentry.elem);
+  if (!fentry_he) {
+    return;
+  }
+  struct file_mmap_entry *fentry = hash_entry(fentry_he, struct file_mmap_entry, elem);
+
+  unmap_entry(&t->page_mmap_table, &t->file_mmap_table, fentry, true);
+}

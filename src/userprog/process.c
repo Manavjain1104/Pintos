@@ -21,6 +21,7 @@
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 #include "vm/spt.h"
+#include "vm/mmap.h"
 
 static thread_func start_process NO_RETURN;
 static bool load (char *cmdline, void (**eip) (void), void **esp);
@@ -165,10 +166,12 @@ process_exit (void)
 {
   struct thread *cur = thread_current ();
 
+  uint32_t *pd;
+      
   /* destroy supplemental page_table */
   destroy_spt_table(&cur->sp_table);
 
-  uint32_t *pd;
+  destroy_mmap_tables();
 
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
@@ -293,8 +296,14 @@ load (char *file_name, void (**eip) (void), void **esp)
     goto done;
   process_activate ();
 
+  // TODO: check if the two calls below not successful
   /* supplemental page table intialisation */
   generate_spt_table(&t->sp_table);
+
+  /* Memory mapped files table initialization */
+  generate_mmap_tables(&t->page_mmap_table, &t->file_mmap_table);
+
+  t->mapid_next = 0;
 
   /* Parsing the file name from the fn_copy */
   char *saveptr;

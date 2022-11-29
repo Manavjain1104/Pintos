@@ -31,6 +31,7 @@ struct spt_entry {
 bool generate_spt_table(struct hash *spt_table);
 struct hash_elem * insert_spe(struct hash *spt_table, struct spt_entry *spe);
 void update_spe(struct spt_entry *old_spe, struct spt_entry *new_spe);
+bool contains_upage(struct hash *spt_table, void *upage);
 void free_entry(struct hash *spt_table, void *upage);
 void destroy_spt_table(struct hash *spt_table);
 

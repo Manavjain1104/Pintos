@@ -9,6 +9,7 @@
 #include "threads/palloc.h"
 #include "threads/vaddr.h"
 #include "vm/spt.h"
+#include "vm/mmap.h"
 #include "devices/swap.h"
 #include "lib/string.h"
 #include "userprog/pagedir.h"
@@ -25,6 +26,8 @@ static uint8_t * get_and_install_page(enum palloc_flags flags,
                      void *upage, 
                      uint32_t *pagedir, 
                      bool writable);
+static bool 
+actual_load_mmap_page(struct page_mmap_entry *pentry);
 
 /* Registers handlers for interrupts that can be caused by user
    programs.
@@ -163,6 +166,7 @@ page_fault (struct intr_frame *f)
   write = (f->error_code & PF_W) != 0;
   user = (f->error_code & PF_U) != 0; 
 
+  struct thread *t = thread_current();
 
   /* setting user stack pointer and validating addr if user faulted */
   if (user)
@@ -183,40 +187,59 @@ page_fault (struct intr_frame *f)
 
   /* check SPT if page was not present */
   if (not_present)
-    {
-      struct hash spt = thread_current()->sp_table;
-      struct spt_entry fake_entry;
-      fake_entry.upage = pg_round_down(fault_addr);
-      struct hash_elem *found = hash_find (&spt, &fake_entry.elem);
+   {
+      struct hash spt = t->sp_table;
+      struct spt_entry fake_sptentry;
+      void *fault_upage = pg_round_down(fault_addr);
+      fake_sptentry.upage = fault_upage;
+
+      // printf("EIP: %p\n", f->eip);
+      // printf("FAULTING UPAGE: %p  fault_addr:%p\n", fake_sptentry.upage, fault_addr);
+
+      struct hash_elem *found = hash_find (&spt, &fake_sptentry.elem);
 
       /* Use SPT data to handle page fault */
       if (found)
       {
-        struct spt_entry *spe = hash_entry(found, struct spt_entry, elem);
-        
-        if (!spe->writable && write)
-        {
-          /* User tried to write to a read only page */ 
-          goto failure;
-        }
+         struct spt_entry *spe = hash_entry(found, struct spt_entry, elem);
+         if (!spe->writable && write)
+         {
+            // user tried to write to a read only page
+            goto failure;
+         }
 
-        /* Code reaching here indicates that access was valid, load neccesary */ 
-        if (spe->location == FILE_SYS || spe->location == ALL_ZERO)
-        {
-            if (!actual_load_page(spe))
-            {  
-              printf("Failed to load spt page entry at addr: %p\n", fault_addr);
-              goto failure;
-            }
-        } 
-        else
-        {
-            /* Page must exist in a swap slot */
-            ASSERT (spe->location == SWAP_SLOT);
-            // TODO : does this install also???
-            swap_in (spe->upage, spe->swap_slot);   
-        }
-      return;
+         /* Code reaching here indicates that access was valid, load neccesary */ 
+         if (spe->location == FILE_SYS || spe->location == ALL_ZERO)
+         {
+               if (!actual_load_page(spe))
+               {  
+               printf("Failed to load spt page entry at addr: %p\n", fault_addr);
+               goto failure;
+               }
+         } 
+         else
+         {
+               /* Page must exist in a swap slot */
+               ASSERT (spe->location == SWAP_SLOT);
+               // TODO : does this install also???
+               swap_in (spe->upage, spe->swap_slot);   
+         }
+         return;
+      }
+
+
+      /* Page not found in supplemental page table.
+         Now checking whether page corresponds to memory mapped file */
+      struct page_mmap_entry *pentry = get_mmap_page(
+         &t->page_mmap_table, fault_upage
+      );
+      if (pentry)
+      {
+         if (!actual_load_mmap_page(pentry))
+         {
+            NOT_REACHED();
+         }
+         return;
       }
 
       /* Checking for stack fault*/
@@ -255,17 +278,18 @@ page_fault (struct intr_frame *f)
           return;
         }
       }
+
     }
  
  failure:
    /* Handle page_faults gracefully for user invalid access. */
-   if (thread_current()->in_sys_call) 
+   if (t->in_sys_call) 
    {
-     f->eip = (void *) f->eax;
-     f->eax = 0xffffffff;
-     return;
+      f->eip = (void *) f->eax;
+      f->eax = 0xffffffff;
+      return;
    }
-   
+
    printf ("Page fault at %p: %s error %s page in %s context.\n",
          fault_addr,
          not_present ? "not present" : "rights violation",
@@ -321,6 +345,32 @@ actual_load_page(struct spt_entry *spe)
    }
    lock_release(&file_lock);
    memset (kpage + spe->page_read_bytes, 0, PGSIZE - spe->page_read_bytes);
+   return true;
+}
+
+/* function called when page faults for FILE_SYS or ALL_ZERO pages */
+static bool 
+actual_load_mmap_page(struct page_mmap_entry *pentry)
+{  
+   struct thread *t = thread_current ();
+   uint8_t *kpage = get_and_install_page(PAL_USER, 
+                           pentry->uaddr, 
+                           t->pagedir, 
+                           true);
+   /* case when the get and install fails */
+   if (kpage == NULL)
+   { 
+      return false;
+   }
+
+   /* Load data into the page. */
+   struct file *fp = pentry->fentry->file_pt;
+   lock_acquire(&file_lock);
+   file_seek(fp, pentry->offset);
+   off_t page_read_bytes = (file_length(fp) - pentry->offset) >= PGSIZE ? PGSIZE : file_length(fp) % PGSIZE;
+   file_read (pentry->fentry->file_pt, kpage, page_read_bytes);
+   lock_release(&file_lock);
+   memset (kpage + page_read_bytes, 0, PGSIZE - page_read_bytes);
    return true;
 }
 

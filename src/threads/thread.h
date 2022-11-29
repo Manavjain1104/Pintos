@@ -119,6 +119,11 @@ struct thread
     uint32_t *pagedir;                  /* Page directory. */
 
     struct hash sp_table;              /* supplemental page table */
+
+    struct hash page_mmap_table;        /* Page hash table for memory
+                                           mapped files */
+    struct hash file_mmap_table;        /* File hash table for memory
+                                            mapped files */
     
     /* to allow thread to be part of children list in 
     parent process thread */
@@ -137,7 +142,9 @@ struct thread
     bool in_sys_call;
 
     /* executable file to keep track of which file to deny writes to */
-    struct file *exec_file; 
+    struct file *exec_file;
+
+    unsigned mapid_next;
 // #endif
 
     /* Pointer to User Stack Frame for User Stack Growth */
