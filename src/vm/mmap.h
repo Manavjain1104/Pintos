@@ -31,8 +31,6 @@ void unmap_entry(struct hash *page_mmap_table, struct hash *file_mmap_table,
                  struct file_mmap_entry *fentry, bool delete_from_table);
 void destroy_mmap_tables(void);
 
-// TODO: write 
-// TODO concurrency: lock on allocate_mapid + concurrency overlap + insert
-// TODO: merge into supplemental_page_table
-// make mapid thread specific
+// TODO: concurrency overlap + insert + unmap?: mmap_lock -> sharing
+// TODO: make mapid thread specific?
 #endif /* vm/mmap.h */

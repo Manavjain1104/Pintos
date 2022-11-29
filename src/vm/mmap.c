@@ -5,6 +5,7 @@
 #include "filesys/file.h"
 #include "threads/vaddr.h"
 #include "threads/thread.h"
+#include "threads/synch.h"
 #include "userprog/pagedir.h"
 #include "lib/kernel/list.h"
 
@@ -45,13 +46,17 @@ mapid_t insert_mmap(struct hash *page_mmap_table, struct hash *file_mmap_table,
                     void *uaddr, struct fd_st *fd_obj)
 {
     struct file_mmap_entry *fentry = malloc(sizeof(struct file_mmap_entry));
+
+    lock_acquire(&file_lock);
     fentry->mapping = allocate_mapid();
     fentry->file_pt = file_reopen(fd_obj->file_pt);
-    
+    unsigned flength = file_length(fd_obj->file_pt);
+    lock_release(&file_lock);
+
     struct list *map_entries = malloc(sizeof(struct list));
     list_init(map_entries);
 
-    unsigned last_page = (unsigned) pg_round_down(uaddr + file_length(fd_obj->file_pt));
+    unsigned last_page = (unsigned) pg_round_down(uaddr + flength);
     for (unsigned i = (unsigned) uaddr; i <= last_page; i += PGSIZE) {
         struct page_mmap_entry *pentry = malloc(sizeof(struct page_mmap_entry));
         pentry->uaddr = (void *) i;
@@ -79,9 +84,11 @@ void unmap_entry(struct hash *page_mmap_table, struct hash *file_mmap_table,
         if (pagedir_is_dirty (thread_current ()->pagedir, pentry->uaddr))
         {
             struct file *fp = pentry->fentry->file_pt;
+            lock_acquire(&file_lock);
             file_seek (fp, pentry->offset);
             /* TODO: check if correct to load entire page */
             file_write (fp, pagedir_get_page(thread_current()->pagedir, pentry->uaddr), PGSIZE);
+            lock_release(&file_lock);
         }
         e = list_next(e);
         free(pentry);
@@ -89,7 +96,9 @@ void unmap_entry(struct hash *page_mmap_table, struct hash *file_mmap_table,
     if (delete_from_table) {
         hash_delete(file_mmap_table, &fentry->elem);
     }
+    lock_acquire(&file_lock);
     file_close(fentry->file_pt);
+    lock_release(&file_lock);
     free(fentry->page_mmap_entries);
     free(fentry);
 }
