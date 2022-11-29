@@ -18,7 +18,7 @@ static unsigned file_mmap_hash_func(const struct hash_elem *e,
 static bool file_mmap_less_func (const struct hash_elem *a, 
                                  const struct hash_elem *b, 
                                  void *aux UNUSED);
-static int allocate_mapid (void);
+static int allocate_mapid (struct thread *current);
 static void mmap_entry_free_func (struct hash_elem *e, void *aux UNUSED);
 
 bool generate_mmap_tables(struct hash *page_mmap_table,
@@ -48,7 +48,7 @@ mapid_t insert_mmap(struct hash *page_mmap_table, struct hash *file_mmap_table,
     struct file_mmap_entry *fentry = malloc(sizeof(struct file_mmap_entry));
 
     lock_acquire(&file_lock);
-    fentry->mapping = allocate_mapid();
+    fentry->mapping = allocate_mapid(thread_current());
     fentry->file_pt = file_reopen(fd_obj->file_pt);
     unsigned flength = file_length(fd_obj->file_pt);
     lock_release(&file_lock);
@@ -146,9 +146,8 @@ static bool file_mmap_less_func (const struct hash_elem *a,
         < (hash_entry(b, struct file_mmap_entry, elem) -> mapping);
 }
 
-static int allocate_mapid (void)
+static int allocate_mapid (struct thread *cur)
 {
-    static int counter = 0;
-    counter++;
-    return counter;
+    cur->mapid_next++;
+    return cur->mapid_next;
 }

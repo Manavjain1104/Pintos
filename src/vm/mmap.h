@@ -33,4 +33,5 @@ void destroy_mmap_tables(void);
 
 // TODO: concurrency overlap + insert + unmap?: mmap_lock -> sharing
 // TODO: make mapid thread specific?
+// TODO: check if correct to load entire page in file_write
 #endif /* vm/mmap.h */

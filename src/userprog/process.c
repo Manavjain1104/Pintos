@@ -302,6 +302,8 @@ load (char *file_name, void (**eip) (void), void **esp)
   /* Memory mapped files table initialization */
   generate_mmap_tables(&t->page_mmap_table, &t->file_mmap_table);
 
+  t->mapid_next = 0;
+
   /* Parsing the file name from the fn_copy */
   char *saveptr;
 

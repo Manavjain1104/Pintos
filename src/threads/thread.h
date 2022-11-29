@@ -140,7 +140,9 @@ struct thread
     bool in_sys_call;
 
     /* executable file to keep track of which file to deny writes to */
-    struct file *exec_file; 
+    struct file *exec_file;
+
+    unsigned mapid_next;
 // #endif
 
     /* Owned by thread.c. */
