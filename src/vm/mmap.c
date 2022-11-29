@@ -86,8 +86,9 @@ void unmap_entry(struct hash *page_mmap_table, struct hash *file_mmap_table,
             struct file *fp = pentry->fentry->file_pt;
             lock_acquire(&file_lock);
             file_seek (fp, pentry->offset);
-            /* TODO: check if correct to load entire page */
-            file_write (fp, pagedir_get_page(thread_current()->pagedir, pentry->uaddr), PGSIZE);
+            unsigned flength = file_length(fentry->file_pt);
+            file_write (fp, pagedir_get_page(thread_current()->pagedir, pentry->uaddr),
+               flength - pentry->offset >= PGSIZE ? PGSIZE : flength - pentry->offset);
             lock_release(&file_lock);
         }
         e = list_next(e);
