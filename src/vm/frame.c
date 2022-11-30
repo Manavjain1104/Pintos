@@ -47,6 +47,12 @@ free_frame(struct hash *frame_table, void *kva)
     }
     return false;
 }
+
+struct frame_entry *find_frame_entry(struct hash *frame_table, uint32_t *kpage) {
+    struct frame_entry fake_fentry;
+    fake_fentry.kva = kpage;
+    return hash_entry(hash_find(frame_table, &fake_fentry.elem), struct frame_entry, elem);
+}
     
 
 static unsigned frame_hash_func(const struct hash_elem *e, void *aux UNUSED)
