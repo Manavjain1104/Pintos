@@ -144,7 +144,14 @@ struct thread
     /* executable file to keep track of which file to deny writes to */
     struct file *exec_file;
 
+   /* list elem for the owners of the sharing table */
+    struct list_elem owners_elem;
+
+    /* next mapping id for memory mapped files table */
     unsigned mapid_next;
+
+    /* file name for loading executable file */
+    char *file_name;
 // #endif
 
     /* Pointer to User Stack Frame for User Stack Growth */

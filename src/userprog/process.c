@@ -395,6 +395,8 @@ load (char *file_name, void (**eip) (void), void **esp)
           break;
         }
     }
+  
+  t->file_name = file_name;
 
   /* Set up stack. */
   if (!setup_stack (esp, file_name, saveptr))

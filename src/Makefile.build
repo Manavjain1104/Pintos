@@ -66,7 +66,9 @@ userprog_SRC += userprog/tss.c		# TSS management.
 vm_SRC = vm/frame.c			# Frame Table file.
 vm_SRC += vm/spt.c			# Supplementary Page Table file.
 vm_SRC += vm/mmap.c			# Memory mapped files management.
+vm_SRC += vm/sharing.c   	# Sharing Table
 vm_SRC += devices/swap.c    # Swap block manager
+
 
 
 # Filesystem code.

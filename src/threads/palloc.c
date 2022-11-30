@@ -14,6 +14,7 @@
 #include "threads/malloc.h"
 #include "vm/frame.h"
 #include "devices/swap.h"
+#include "vm/sharing.h"
 
 
 /* Page allocator.  Hands out memory in page-size (or
@@ -48,6 +49,9 @@ static bool page_from_pool (const struct pool *, void *page);
 /* stroing meta data about the memory frames */
 struct hash frame_table;
 
+/* stroing sharing data for files */
+struct hash share_table;
+
 /* synchronising frame table accesses */
 struct lock frame_lock;
 
@@ -75,6 +79,12 @@ palloc_init (size_t user_page_limit)
   if (!generate_frame_table(&frame_table))
   {
     PANIC("Could not generate frame table! \n");
+  }
+
+  /* initialise the frame table */
+  if (!generate_sharing_table(&share_table))
+  {
+    PANIC("Could not generate sharing table! \n");
   }
 
   /* initialise the swap space */
@@ -145,8 +155,10 @@ palloc_get_page (enum palloc_flags flags)
     } 
 
     /* insert new entry into page table */
+
     struct frame_entry *frame_pt  = malloc(sizeof(struct frame_entry));
-    frame_pt -> owner = thread_current();
+    list_init (&frame_pt->owners);
+    list_push_back(&frame_pt->owners, &thread_current()->owners_elem);
     frame_pt -> kva = kva;
     insert_frame(&frame_table, frame_pt);
     lock_release(&frame_lock);

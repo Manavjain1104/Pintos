@@ -17,12 +17,13 @@ void
 insert_frame(struct hash *frame_table, struct frame_entry *frame)
 {
     struct hash_elem *he = hash_insert(frame_table, &frame->elem);
-    if (he != NULL)
-    {   
-        /* update values in the old_entry with the same frame kva */
-        update_entry (hash_entry(he, struct frame_entry, elem), frame);
-        free(frame);
-    }
+    ASSERT(!he);
+    // if (he != NULL)
+    // {   
+    //     /* update values in the old_entry with the same frame kva */
+    //     update_entry (hash_entry(he, struct frame_entry, elem), frame);
+    //     free(frame);
+    // }
 }
 
 struct frame_entry *
@@ -59,9 +60,4 @@ static bool frame_less_func (const struct hash_elem *a,
 {
     return (hash_entry(a, struct frame_entry, elem) -> kva) 
         < (hash_entry(b, struct frame_entry, elem) -> kva);
-}
-
-void update_entry (struct frame_entry *old, struct frame_entry *new)
-{
-    old->owner = new->owner;
 }

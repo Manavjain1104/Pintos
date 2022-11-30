@@ -14,7 +14,7 @@
 #include "lib/string.h"
 #include "userprog/pagedir.h"
 #include "threads/malloc.h"
-
+#include "vm/sharing.h"
 
 /* Number of page faults processed. */
 static long long page_fault_cnt;
@@ -22,10 +22,14 @@ static long long page_fault_cnt;
 static void kill (struct intr_frame *);
 static void page_fault (struct intr_frame *);
 static bool actual_load_page(struct spt_entry *spe);
-static uint8_t * get_and_install_page(enum palloc_flags flags, 
+static uint8_t *
+get_and_install_page(enum palloc_flags flags, 
                      void *upage, 
                      uint32_t *pagedir, 
-                     bool writable);
+                     bool writable,
+                     bool is_filesys,
+                     char *name,
+                     unsigned int page_num);
 static bool 
 actual_load_mmap_page(struct page_mmap_entry *pentry);
 
@@ -260,7 +264,10 @@ page_fault (struct intr_frame *f)
            uint8_t *k_new_page = get_and_install_page(PAL_USER | PAL_ZERO, 
                                 next_upage, 
                                 thread_current()->pagedir, 
-                                true);
+                                true,
+                                false,
+                                NULL,
+                                -1);
 
            if (!k_new_page)
            {
@@ -317,7 +324,10 @@ actual_load_page(struct spt_entry *spe)
    kpage = get_and_install_page(flags, 
                            spe->upage, 
                            t->pagedir, 
-                           spe->writable);
+                           spe->writable,
+                           spe->location == FILE_SYS,
+                           t->file_name,
+                           (spe->absolute_off - (spe->absolute_off % PGSIZE)) / PGSIZE);
     
    /* case when the get and install fails */
    if (kpage == NULL)
@@ -356,7 +366,10 @@ actual_load_mmap_page(struct page_mmap_entry *pentry)
    uint8_t *kpage = get_and_install_page(PAL_USER, 
                            pentry->uaddr, 
                            t->pagedir, 
-                           true);
+                           true,
+                           true,
+                           NULL,
+                           -1);
    /* case when the get and install fails */
    if (kpage == NULL)
    { 
@@ -380,12 +393,26 @@ static uint8_t *
 get_and_install_page(enum palloc_flags flags, 
                      void *upage, 
                      uint32_t *pagedir, 
-                     bool writable)
+                     bool writable,
+                     bool is_filesys,
+                     char *name,
+                     unsigned int page_num)
 {
    uint8_t *kpage = pagedir_get_page (pagedir, upage);
 
    if (kpage == NULL)
    {
+    if (is_filesys && !writable) {
+      void *kpage = find_sharing_entry(&share_table, name, page_num);
+      if (kpage) {
+        /* Add the page to the process's address space. */
+        if (!install_page (upage, kpage, writable)) 
+        {
+          return NULL; 
+        }
+        return kpage;
+      }
+    }
      /* Get a new page of memory. */
      kpage = palloc_get_page (flags);
      if (kpage == NULL)
@@ -398,7 +425,11 @@ get_and_install_page(enum palloc_flags flags,
      {
        palloc_free_page (kpage);
        return NULL; 
-     }     
+     }
+
+    if (is_filesys && !writable) {
+      insert_sharing_entry(&share_table, name, page_num, kpage);
+    }
    } else 
    {  
      /* Check if writable flag for the page should be updated */

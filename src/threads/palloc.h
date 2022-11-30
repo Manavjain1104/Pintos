@@ -11,8 +11,8 @@ enum palloc_flags
     PAL_USER = 004              /* User page. */
   };
 
-/* */
 extern struct hash frame_table;
+extern struct hash share_table;
 
 void palloc_init (size_t user_page_limit);
 void *palloc_get_page (enum palloc_flags);
