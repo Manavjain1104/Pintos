@@ -15,6 +15,7 @@
 #include "userprog/pagedir.h"
 #include "threads/malloc.h"
 #include "vm/sharing.h"
+#include "vm/frame.h"
 
 /* Number of page faults processed. */
 static long long page_fault_cnt;
@@ -402,14 +403,19 @@ get_and_install_page(enum palloc_flags flags,
 
    if (kpage == NULL)
    {
-    if (is_filesys && !writable) {
+    if (is_filesys && !writable)
+    {
       void *kpage = find_sharing_entry(&share_table, name, page_num);
-      if (kpage) {
+      if (kpage)
+      {
         /* Add the page to the process's address space. */
         if (!install_page (upage, kpage, writable)) 
         {
           return NULL; 
         }
+        struct frame_entry *kframe_entry = find_frame_entry(&frame_table, kpage);
+        list_push_back(&kframe_entry->owners, &thread_current()->owners_elem);
+        kframe_entry->owners_list_size++;
         return kpage;
       }
     }

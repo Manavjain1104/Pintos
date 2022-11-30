@@ -15,7 +15,7 @@
 #include "vm/frame.h"
 #include "devices/swap.h"
 #include "vm/sharing.h"
-
+#include "userprog/pagedir.h"
 
 /* Page allocator.  Hands out memory in page-size (or
    page-multiple) chunks.  See malloc.h for an allocator that
@@ -159,7 +159,8 @@ palloc_get_page (enum palloc_flags flags)
     struct frame_entry *frame_pt  = malloc(sizeof(struct frame_entry));
     list_init (&frame_pt->owners);
     list_push_back(&frame_pt->owners, &thread_current()->owners_elem);
-    frame_pt -> kva = kva;
+    frame_pt->kva = kva;
+    frame_pt->owners_list_size = 1;
     insert_frame(&frame_table, frame_pt);
     lock_release(&frame_lock);
   }
@@ -198,11 +199,20 @@ palloc_free_multiple (void *pages, size_t page_cnt)
 void
 palloc_free_page (void *page) 
 {
+  struct thread *t = thread_current();
   if (page_from_pool (&user_pool, page))
-  { 
-    lock_acquire(&frame_lock);
-    ASSERT(free_frame(&frame_table, page));
-    lock_release(&frame_lock);
+  {
+    list_remove(&t->owners_elem);
+    struct frame_entry *kframe_entry = find_frame_entry(&frame_table, page);
+    kframe_entry->owners_list_size--;
+    if (kframe_entry->owners_list_size == 0) { 
+      lock_acquire(&frame_lock);
+      ASSERT(free_frame(&frame_table, page));
+      lock_release(&frame_lock);
+    } else {
+      pagedir_clear_page(t->pagedir, page);
+      return;
+    }
   }
   palloc_free_multiple (page, 1);
 }
