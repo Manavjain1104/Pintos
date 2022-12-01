@@ -396,7 +396,7 @@ load (char *file_name, void (**eip) (void), void **esp)
         }
     }
   
-  t->file_name = file_name;
+  strlcpy(t->file_name, file_name, MAX_FILE_NAME_SIZE);
 
   /* Set up stack. */
   if (!setup_stack (esp, file_name, saveptr))

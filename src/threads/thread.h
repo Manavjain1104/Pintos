@@ -10,6 +10,8 @@
 #include "devices/timer.h"
 #include "lib/kernel/hash.h"
 
+#define MAX_FILE_NAME_SIZE 14
+
 /* States in a thread's life cycle. */
 enum thread_status
   {
@@ -144,14 +146,11 @@ struct thread
     /* executable file to keep track of which file to deny writes to */
     struct file *exec_file;
 
-   /* list elem for the owners of the sharing table */
-    struct list_elem owners_elem;
-
     /* next mapping id for memory mapped files table */
     unsigned mapid_next;
 
     /* file name for loading executable file */
-    char *file_name;
+    char file_name[MAX_FILE_NAME_SIZE];
 // #endif
 
     /* Pointer to User Stack Frame for User Stack Growth */

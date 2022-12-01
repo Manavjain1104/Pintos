@@ -55,6 +55,9 @@ struct hash share_table;
 /* synchronising frame table accesses */
 struct lock frame_lock;
 
+/* synchronising share table accesses */
+struct lock share_lock;
+
 /* Initializes the page allocator.  At most USER_PAGE_LIMIT
    pages are put into the user pool. */
 void
@@ -90,6 +93,7 @@ palloc_init (size_t user_page_limit)
   /* initialise the swap space */
   swap_init();
 
+  lock_init(&share_lock);
   lock_init(&frame_lock);
 }
 
@@ -142,30 +146,28 @@ palloc_get_multiple (enum palloc_flags flags, size_t page_cnt)
 void *
 palloc_get_page (enum palloc_flags flags) 
 {
-  void *kva =  palloc_get_multiple (flags, 1);
-
+  void *kpage =  palloc_get_multiple (flags, 1);
 
   if (flags & PAL_USER)
   {
     lock_acquire(&frame_lock);
-    if (kva == NULL)
+    if (kpage == NULL)
     {
       lock_release(&frame_lock);
       return NULL; // TODO
     } 
 
     /* insert new entry into page table */
-
     struct frame_entry *frame_pt  = malloc(sizeof(struct frame_entry));
     list_init (&frame_pt->owners);
-    list_push_back(&frame_pt->owners, &thread_current()->owners_elem);
-    frame_pt->kva = kva;
-    frame_pt->owners_list_size = 1;
+    frame_pt->kva = kpage;
+    frame_pt->owners_list_size = 0;
+    frame_pt->inner_entry = NULL;
     insert_frame(&frame_table, frame_pt);
     lock_release(&frame_lock);
   }
 
-  return kva;
+  return kpage;
 }
 
 /* Frees the PAGE_CNT pages starting at PAGES. */
@@ -199,18 +201,52 @@ palloc_free_multiple (void *pages, size_t page_cnt)
 void
 palloc_free_page (void *page) 
 {
-  struct thread *t = thread_current();
   if (page_from_pool (&user_pool, page))
   {
-    list_remove(&t->owners_elem);
+    lock_acquire(&frame_lock);
+    lock_acquire(&share_lock);
+
+    struct thread *t = thread_current();
+    struct owner *owner_obj = NULL;
     struct frame_entry *kframe_entry = find_frame_entry(&frame_table, page);
-    kframe_entry->owners_list_size--;
+    ASSERT(kframe_entry);
+
+    struct list_elem *e;
+    for (e = list_begin(&kframe_entry->owners); 
+         e != list_end(&kframe_entry->owners);
+         e = list_next(e))
+    {    
+        owner_obj = list_entry(e, struct owner, elem);
+        if (owner_obj->t->tid == thread_current()->tid)
+        {
+          break;
+        }
+    }
+    
+    if (owner_obj)
+    {
+      list_remove(&owner_obj->elem);
+      kframe_entry->owners_list_size--;
+    }
+    
     if (kframe_entry->owners_list_size == 0) { 
-      lock_acquire(&frame_lock);
+      if (kframe_entry->inner_entry) {
+        ASSERT(delete_sharing_frame(&share_table, kframe_entry->inner_entry));
+
+        ASSERT(owner_obj);
+        free(owner_obj);
+      }
       ASSERT(free_frame(&frame_table, page));
+      lock_release(&share_lock);
       lock_release(&frame_lock);
     } else {
-      pagedir_clear_page(t->pagedir, page);
+      pagedir_clear_page(t->pagedir, owner_obj->upage);
+
+      ASSERT(owner_obj);
+      free(owner_obj);
+
+      lock_release(&share_lock);
+      lock_release(&frame_lock);
       return;
     }
   }
@@ -246,28 +282,12 @@ page_from_pool (const struct pool *pool, void *page)
   size_t page_no = pg_no (page);
   size_t start_page = pg_no (pool->base);
   size_t end_page = start_page + bitmap_size (pool->used_map);
-
+ 
   return page_no >= start_page && page_no < end_page;
 }
 
-// void *
-// palloc_get_frame (enum palloc_flags flags) 
-// {
-//   void *kva =  palloc_get_page (flags);
-//   if (kva == NULL)
-//   {
-//     /* evict and already existing frame and change its page reference */
-//     struct frame_entry * old_frame_pt = evict_frame(&frame_table);
-//     struct frame_entry new_frame;
-//     new_frame.owner = thread_current();
-//     update_entry(old_frame_pt, &new_frame);
-//     return old_frame_pt->kva;
-//   } 
-
-//   /* insert new entry into page table */
-//   struct frame_entry *frame_pt  = malloc(sizeof(struct frame_entry));
-//   frame_pt -> owner = thread_current();
-//   frame_pt -> kva = kva;
-//   insert_frame(&frame_table, frame_pt);
-//   return kva;
-// }
+void palloc_finish (void)
+{
+  destroy_frame_table(&frame_table);
+  destroy_share_table(&share_table);
+}

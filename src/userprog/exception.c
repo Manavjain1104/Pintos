@@ -148,7 +148,7 @@ page_fault (struct intr_frame *f)
   bool user;         /* True: access by user, false: access by kernel. */
   void *fault_addr;  /* Fault address. */
   
-  void *esp;     /* User Stack Pointer */
+  void *esp = NULL;     /* User Stack Pointer */
 
   /* Obtain faulting address, the virtual address that was
      accessed to cause the fault.  It may point to code or to
@@ -399,44 +399,73 @@ get_and_install_page(enum palloc_flags flags,
                      char *name,
                      unsigned int page_num)
 {
+   // intr_disable();
    uint8_t *kpage = pagedir_get_page (pagedir, upage);
 
    if (kpage == NULL)
    {
+    struct owner *frame_owner = malloc(sizeof(struct owner));
+    frame_owner->t = thread_current();
+    frame_owner->upage = upage;
+
     if (is_filesys && !writable)
     {
+      lock_acquire(&frame_lock);
+      lock_acquire(&share_lock);
       void *kpage = find_sharing_entry(&share_table, name, page_num);
       if (kpage)
       {
         /* Add the page to the process's address space. */
         if (!install_page (upage, kpage, writable)) 
         {
+          free(frame_owner);
           return NULL; 
         }
         struct frame_entry *kframe_entry = find_frame_entry(&frame_table, kpage);
-        list_push_back(&kframe_entry->owners, &thread_current()->owners_elem);
+        list_push_back(&kframe_entry->owners, &frame_owner->elem);
         kframe_entry->owners_list_size++;
+        lock_release(&share_lock);
+        lock_release(&frame_lock);
         return kpage;
-      }
+      }      
+      lock_release(&share_lock);
+      lock_release(&frame_lock);
     }
      /* Get a new page of memory. */
      kpage = palloc_get_page (flags);
      if (kpage == NULL)
      {   
-       return NULL;
+      free(frame_owner);
+      return NULL;
      }
-     
+      
+     struct frame_entry *kframe_entry;
+     if (is_filesys && !writable) {
+      lock_acquire(&frame_lock);
+      kframe_entry = find_frame_entry(&frame_table, kpage);
+      list_push_back(&kframe_entry->owners, &frame_owner->elem);
+      kframe_entry->owners_list_size++;
+      lock_release(&frame_lock);
+     }
+
      /* Add the page to the process's address space. */
      if (!install_page (upage, kpage, writable)) 
      {
-       palloc_free_page (kpage);
-       return NULL; 
+      palloc_free_page (kpage);
+      return NULL; 
      }
 
     if (is_filesys && !writable) {
-      insert_sharing_entry(&share_table, name, page_num, kpage);
+      lock_acquire(&frame_lock);
+      lock_acquire(&share_lock);
+      ASSERT(kframe_entry);
+      kframe_entry->inner_entry 
+         = insert_sharing_entry(&share_table, name, page_num, kpage);
+      lock_release(&share_lock);
+      lock_release(&frame_lock);
     }
-   } else 
+   } 
+   else 
    {  
      /* Check if writable flag for the page should be updated */
      if(writable && !pagedir_is_writable(pagedir, upage))
