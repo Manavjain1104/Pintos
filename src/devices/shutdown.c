@@ -5,6 +5,7 @@
 #include "devices/serial.h"
 #include "devices/timer.h"
 #include "threads/io.h"
+#include "threads/palloc.h"
 #include "threads/thread.h"
 #ifdef USERPROG
 #include "userprog/exception.h"
@@ -94,9 +95,11 @@ shutdown_power_off (void)
   filesys_done ();
 #endif
 
+  // palloc_finish ();
   print_stats ();
 
   printf ("Powering off...\n");
+  palloc_finish();
   serial_flush ();
 
   /* This is a special power-off sequence supported by Bochs and

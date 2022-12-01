@@ -222,7 +222,7 @@ palloc_free_page (void *page)
           break;
         }
     }
-    
+
     if (owner_obj)
     {
       list_remove(&owner_obj->elem);
@@ -240,8 +240,10 @@ palloc_free_page (void *page)
       lock_release(&share_lock);
       lock_release(&frame_lock);
     } else {
-      pagedir_clear_page(t->pagedir, owner_obj->upage);
-
+      if (t->pagedir)
+      {
+        pagedir_clear_page(t->pagedir, owner_obj->upage);
+      }
       ASSERT(owner_obj);
       free(owner_obj);
 
