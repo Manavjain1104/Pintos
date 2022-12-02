@@ -1,5 +1,6 @@
 #include "threads/malloc.h"
 #include "lib/kernel/hash.h"
+#include "threads/thread.h"
 #include "frame.h"
 
 static hash_hash_func frame_hash_func;  // hash function for frame table
@@ -14,44 +15,49 @@ generate_frame_table(struct hash *frame_table)
 }
 
 void 
-insert_frame(struct hash *frame_table, struct frame_entry *frame)
+insert_frame(struct hash *frame_table, 
+             struct frame_entry *frame,
+             struct hash_iterator *it)
 {
     struct hash_elem *he = hash_insert(frame_table, &frame->elem);
     ASSERT(!he);
-    // if (he != NULL)
-    // {   
-    //     /* update values in the old_entry with the same frame kva */
-    //     update_entry (hash_entry(he, struct frame_entry, elem), frame);
-    //     free(frame);
-    // }
+    hash_first(it, frame_table);
 }
 
 struct frame_entry *
-evict_frame(struct hash *frame_table UNUSED)
+evict_frame(struct hash *frame_table, struct hash_iterator *it)
 {
-    // implement eviction policy - AUKAAT BANAO PEHLE LAUDE
+    struct hash_elem *he;
+    struct frame_entry *fe;
+    while((he = get_next(it, frame_table)))
+    {
+        fe = hash_entry(he, struct frame_entry, elem);
+        if (fe->reference_bit)
+        {
+            fe->reference_bit = false;
+            continue;
+        }
+        break;
+    }
+
+    if (he)
+    {
+        return hash_entry(he, struct frame_entry, elem);
+    }
     return NULL;
 }
 
 bool
-free_frame(struct hash *frame_table, void *kva)
+free_frame(struct hash *frame_table, void *kva, struct hash_iterator *it)
 {   
     struct frame_entry fake_frame;
     fake_frame.kva = kva;
     struct hash_elem *he = hash_delete(frame_table, &fake_frame.elem);
+    hash_first(it, frame_table);
     if (he != NULL)
     {
         // mathced an entry
         struct frame_entry *fe = hash_entry(he, struct frame_entry, elem);
-        // struct list_elem *e;
-        // struct list_elem *temp;
-        // for (e = list_begin(&fe->owners); 
-        //      e != list_end(&fe->owners);)
-        // {   
-        //     temp = e;
-        //     e = list_next (e);
-        //     free(list_entry(temp, struct owner, elem));
-        // }
         free(fe);
         return true;
     }
@@ -86,4 +92,16 @@ void destroy_frame_table(struct hash *frame_table)
 static void frame_destroy_func (struct hash_elem *e, void *aux UNUSED)
 {
     free(hash_entry(e, struct frame_entry, elem));
+}
+
+struct hash_elem *
+get_next(struct hash_iterator *it, struct hash *frames)
+{
+    struct hash_elem *he = hash_next(it);
+    if (he)
+    {
+        return he;
+    }
+    hash_first(it, frames);
+    return hash_next(it);
 }

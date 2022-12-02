@@ -15,6 +15,7 @@
 #include "vm/frame.h"
 #include "devices/swap.h"
 #include "vm/sharing.h"
+#include "vm/spt.h"
 #include "userprog/pagedir.h"
 
 /* Page allocator.  Hands out memory in page-size (or
@@ -48,6 +49,9 @@ static bool page_from_pool (const struct pool *, void *page);
 
 /* stroing meta data about the memory frames */
 struct hash frame_table;
+
+/* frame table iterator for SECOND-CHANCE EVICTION */
+struct hash_iterator index;
 
 /* stroing sharing data for files */
 struct hash share_table;
@@ -83,6 +87,8 @@ palloc_init (size_t user_page_limit)
   {
     PANIC("Could not generate frame table! \n");
   }
+
+  hash_first(&index, &frame_table);
 
   /* initialise the frame table */
   if (!generate_sharing_table(&share_table))
@@ -153,8 +159,116 @@ palloc_get_page (enum palloc_flags flags)
     lock_acquire(&frame_lock);
     if (kpage == NULL)
     {
+      struct frame_entry *fe = evict_frame(&frame_table, &index);
+      if (!fe)
+      {
+        lock_release(&frame_lock);
+        if (flags & PAL_ASSERT)
+        {
+          PANIC ("PAL_ASSERT failed during page palloc! \n");  
+        }
+        return NULL;
+      }
+
+      /* signal for swapping/free, remove */
+      struct list_elem *e = list_begin(&fe->owners);
+      ASSERT(e);
+      struct owner *frame_owner = list_entry(e, struct owner, elem);
+      struct spt_entry *spe 
+          = find_spe(&frame_owner->t->sp_table, frame_owner->upage);
+
+      /* page can be swapped if dirty */
+      if (pagedir_is_writable(frame_owner->t->pagedir, frame_owner->upage))
+      {
+        // hence not sharable
+        if (pagedir_is_dirty(frame_owner->t->pagedir, frame_owner->upage))
+        {
+          // swap
+          spe->location_prev = spe->location;
+          spe->location = SWAP_SLOT;
+          spe->swap_slot = swap_out(fe->kva);
+        } else {
+          // forget about page
+          free_entry(&frame_owner->t->sp_table, frame_owner->upage);
+        }
+        
+        /* reset frame_entry for new page */
+        if (flags & PAL_ZERO)
+        {
+          memset(fe->kva, 0,PGSIZE); 
+        }
+        pagedir_clear_page(frame_owner->t->pagedir, frame_owner->upage);
+        ASSERT(fe->owners_list_size == 1);
+        list_remove(&frame_owner->elem);
+        free(frame_owner);
+        ASSERT(!fe->inner_entry);
+        fe->owners_list_size = 0;
+        fe->reference_bit = false;
+        lock_release(&frame_lock);
+
+        if (!fe->kva && (flags & PAL_ASSERT))
+        {
+          PANIC ("PAL_ASSERT failed during page palloc! \n");  
+        }
+        return fe->kva;
+      }
+      
+      // means page is either an all_zero page
+      if (spe->location == ALL_ZERO)
+      {
+        free_entry(&frame_owner->t->sp_table, frame_owner->upage);
+
+        /* reset frame_entry for new page */
+        if (flags & PAL_ZERO)
+        {
+          memset(fe->kva, 0,PGSIZE); 
+        }
+        pagedir_clear_page(frame_owner->t->pagedir, frame_owner->upage);
+        ASSERT(fe->owners_list_size == 1);
+        list_remove(&frame_owner->elem);
+        free(frame_owner);
+        ASSERT(!fe->inner_entry);
+        fe->owners_list_size = 0;
+        fe->reference_bit = false;
+        lock_release(&frame_lock);
+        return fe->kva;
+      }
+
+      // in the case of sharing - multiple owners
+      ASSERT(spe->location == FILE_SYS)
+      struct list_elem *temp;
+      
+      for (; e != list_end (&fe->owners);)
+      {
+        temp = e;
+        e = list_next(e);
+        struct owner *o = list_entry(temp, struct owner, elem);
+
+        free_entry(&o->t->sp_table, o->upage);
+
+        /* reset frame_entry for new page */
+        if (flags & PAL_ZERO)
+        {
+          memset(fe->kva, 0,PGSIZE); 
+        }
+
+        pagedir_clear_page(o->t->pagedir, o->upage);
+        list_remove(temp);
+        free(o);
+        fe->owners_list_size = 0;
+        fe->reference_bit = false;
+      }
+      
+      /* reset frame_entry for new page and remove sharing entry */
+      lock_acquire(&share_lock);
+      ASSERT(fe->inner_entry);
+      delete_sharing_frame(&share_table, fe->inner_entry);
+      lock_release(&share_lock);
+      fe->inner_entry = NULL;
+      fe->owners_list_size = 0;
+      fe->reference_bit = false;
       lock_release(&frame_lock);
-      return NULL; // TODO
+      return fe->kva;
     } 
 
     /* insert new entry into page table */
@@ -162,8 +276,9 @@ palloc_get_page (enum palloc_flags flags)
     list_init (&frame_pt->owners);
     frame_pt->kva = kpage;
     frame_pt->owners_list_size = 0;
+    frame_pt->reference_bit = 0; // second chance algorithm
     frame_pt->inner_entry = NULL;
-    insert_frame(&frame_table, frame_pt);
+    insert_frame(&frame_table, frame_pt, &index);
     lock_release(&frame_lock);
   }
 
@@ -236,7 +351,7 @@ palloc_free_page (void *page)
         ASSERT(owner_obj);
         free(owner_obj);
       }
-      ASSERT(free_frame(&frame_table, page));
+      ASSERT(free_frame(&frame_table, page, &index));
       lock_release(&share_lock);
       lock_release(&frame_lock);
     } else {

@@ -226,8 +226,17 @@ page_fault (struct intr_frame *f)
          {
                /* Page must exist in a swap slot */
                ASSERT (spe->location == SWAP_SLOT);
-               // TODO : does this install also???
-               swap_in (spe->upage, spe->swap_slot);   
+               // printf("SWAPSWAP \n");
+               // TODO : does this install also??? WHat about required evictions
+               void *kpage = palloc_get_page(PAL_USER);
+               swap_in (kpage, spe->swap_slot); 
+               if (!install_page(spe->upage, kpage, spe->writable))
+               {
+                  printf("Could not install swapped in page \n");
+                  palloc_free_page(kpage);
+                  goto failure;
+               }
+               spe->location = spe->location_prev;
          }
          return;
       }
@@ -235,9 +244,8 @@ page_fault (struct intr_frame *f)
 
       /* Page not found in supplemental page table.
          Now checking whether page corresponds to memory mapped file */
-      struct page_mmap_entry *pentry = get_mmap_page(
-         &t->page_mmap_table, fault_upage
-      );
+      struct page_mmap_entry *pentry 
+         = get_mmap_page(&t->page_mmap_table, fault_upage);
       if (pentry)
       {
          if (!actual_load_mmap_page(pentry))

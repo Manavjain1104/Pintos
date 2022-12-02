@@ -46,6 +46,19 @@ void update_spe(struct spt_entry *old_spe, struct spt_entry *new_spe)
     old_spe->location = new_spe->location;
 }
 
+struct spt_entry *
+find_spe(struct hash *spt_table, void *upage)
+{   
+    struct spt_entry fake_entry;
+    fake_entry.upage = upage;
+    struct hash_elem *he = hash_find(spt_table, &fake_entry.elem);
+    if (he)
+    {
+        return hash_entry(he, struct spt_entry, elem);
+    }
+    return NULL;
+}
+
 void 
 destroy_spt_table(struct hash *spt_table)
 {
