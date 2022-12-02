@@ -230,6 +230,7 @@ page_fault (struct intr_frame *f)
                // TODO : does this install also??? WHat about required evictions
                void *kpage = palloc_get_page(PAL_USER);
                ASSERT(kpage);
+               // printf("SWAP_IN:%d \n", spe->swap_slot);
                swap_in (kpage, spe->swap_slot); 
                if (!install_page(spe->upage, kpage, spe->writable))
                {

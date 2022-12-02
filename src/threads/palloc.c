@@ -67,6 +67,7 @@ struct lock share_lock;
 void
 palloc_init (size_t user_page_limit)
 {
+  printf("PALLOC ININTIT\n");
   /* Free memory starts at 1 MB and runs to the end of RAM. */
   uint8_t *free_start = ptov (1024 * 1024);
   uint8_t *free_end = ptov (init_ram_pages * PGSIZE);
@@ -97,7 +98,7 @@ palloc_init (size_t user_page_limit)
   }
 
   /* initialise the swap space */
-  swap_init();
+  printf("INIT SWAPPING \n");
 
   lock_init(&share_lock);
   lock_init(&frame_lock);
@@ -160,7 +161,7 @@ palloc_get_page (enum palloc_flags flags)
     if (kpage == NULL)
     {
       struct frame_entry *fe = evict_frame(&frame_table, &index);
-      printf("Evicted frame pointer: %p \n", fe);
+      // printf("Evicted page Kva: %p \n", fe->kva);
 
       if (!fe)                                                  
       {
@@ -189,7 +190,10 @@ palloc_get_page (enum palloc_flags flags)
           // swap
           spe->location_prev = spe->location;
           spe->location = SWAP_SLOT;
-          spe->swap_slot = swap_out(fe->kva);
+          // printf("KVA:%p\n", fe->kva);
+          size_t slot = swap_out(fe->kva);
+          spe->swap_slot = slot;
+          // printf("SWAP_OUT: %d\n", slot);
         } else {
           // forget about page
           free_entry(&frame_owner->t->sp_table, frame_owner->upage);

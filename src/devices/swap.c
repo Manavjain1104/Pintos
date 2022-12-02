@@ -28,6 +28,7 @@ swap_init (void)
       printf ("no swap device--swap disabled\n");
       swap_bitmap = bitmap_create (0);
   } else {
+    printf("BLOCK SIZE: %u\n", block_size (swap_device));
     // create a bitmap with 1 slot per page-sized chunk of memory on the swap block
     swap_bitmap = bitmap_create (block_size (swap_device) / PAGE_SECTORS);
   }
@@ -47,7 +48,10 @@ swap_out (const void *vaddr)
   size_t slot = bitmap_scan_and_flip (swap_bitmap, 0, 1, false);
   lock_release (&swap_lock);
   if (slot == BITMAP_ERROR) 
+  {
+    printf("BITMAP_ERROR %u\n", BITMAP_ERROR);
     return BITMAP_ERROR; 
+  }
 
   // calculate block sector from swap-slot number
   size_t sector = slot * PAGE_SECTORS;
