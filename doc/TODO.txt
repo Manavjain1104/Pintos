@@ -1,0 +1,8 @@
+macro for -1 (STD_ERROR)
+MAX_PAGE_FILE_SIZE combine into 1 File
+Extract common code such as PAGEDIR
+Add tests
+add another lock in thread :(
+
+    MMAP happening at the same time as spt
+    everything a page fault could happen in
