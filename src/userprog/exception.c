@@ -229,6 +229,7 @@ page_fault (struct intr_frame *f)
                // printf("SWAPSWAP \n");
                // TODO : does this install also??? WHat about required evictions
                void *kpage = palloc_get_page(PAL_USER);
+               ASSERT(kpage);
                swap_in (kpage, spe->swap_slot); 
                if (!install_page(spe->upage, kpage, spe->writable))
                {
@@ -448,13 +449,12 @@ get_and_install_page(enum palloc_flags flags,
      }
       
      struct frame_entry *kframe_entry;
-     if (is_filesys && !writable) {
-      lock_acquire(&frame_lock);
-      kframe_entry = find_frame_entry(&frame_table, kpage);
-      list_push_back(&kframe_entry->owners, &frame_owner->elem);
-      kframe_entry->owners_list_size++;
-      lock_release(&frame_lock);
-     }
+
+   lock_acquire(&frame_lock);
+   kframe_entry = find_frame_entry(&frame_table, kpage);
+   list_push_back(&kframe_entry->owners, &frame_owner->elem);
+   kframe_entry->owners_list_size++;
+   lock_release(&frame_lock);
 
      /* Add the page to the process's address space. */
      if (!install_page (upage, kpage, writable)) 

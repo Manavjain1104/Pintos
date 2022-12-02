@@ -160,7 +160,9 @@ palloc_get_page (enum palloc_flags flags)
     if (kpage == NULL)
     {
       struct frame_entry *fe = evict_frame(&frame_table, &index);
-      if (!fe)
+      printf("Evicted frame pointer: %p \n", fe);
+
+      if (!fe)                                                  
       {
         lock_release(&frame_lock);
         if (flags & PAL_ASSERT)
@@ -171,12 +173,13 @@ palloc_get_page (enum palloc_flags flags)
       }
 
       /* signal for swapping/free, remove */
+      ASSERT(fe->owners_list_size > 0);
       struct list_elem *e = list_begin(&fe->owners);
       ASSERT(e);
       struct owner *frame_owner = list_entry(e, struct owner, elem);
       struct spt_entry *spe 
           = find_spe(&frame_owner->t->sp_table, frame_owner->upage);
-
+      ASSERT(spe != NULL);
       /* page can be swapped if dirty */
       if (pagedir_is_writable(frame_owner->t->pagedir, frame_owner->upage))
       {
@@ -203,7 +206,6 @@ palloc_get_page (enum palloc_flags flags)
         free(frame_owner);
         ASSERT(!fe->inner_entry);
         fe->owners_list_size = 0;
-        fe->reference_bit = false;
         lock_release(&frame_lock);
 
         if (!fe->kva && (flags & PAL_ASSERT))
@@ -229,7 +231,6 @@ palloc_get_page (enum palloc_flags flags)
         free(frame_owner);
         ASSERT(!fe->inner_entry);
         fe->owners_list_size = 0;
-        fe->reference_bit = false;
         lock_release(&frame_lock);
         return fe->kva;
       }
@@ -256,7 +257,6 @@ palloc_get_page (enum palloc_flags flags)
         list_remove(temp);
         free(o);
         fe->owners_list_size = 0;
-        fe->reference_bit = false;
       }
       
       /* reset frame_entry for new page and remove sharing entry */
@@ -266,7 +266,6 @@ palloc_get_page (enum palloc_flags flags)
       lock_release(&share_lock);
       fe->inner_entry = NULL;
       fe->owners_list_size = 0;
-      fe->reference_bit = false;
       lock_release(&frame_lock);
       return fe->kva;
     } 
@@ -276,7 +275,6 @@ palloc_get_page (enum palloc_flags flags)
     list_init (&frame_pt->owners);
     frame_pt->kva = kpage;
     frame_pt->owners_list_size = 0;
-    frame_pt->reference_bit = 0; // second chance algorithm
     frame_pt->inner_entry = NULL;
     insert_frame(&frame_table, frame_pt, &index);
     lock_release(&frame_lock);

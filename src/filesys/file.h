@@ -30,6 +30,4 @@ off_t file_length (struct file *);
 /* File comparison */
 bool file_compare (struct file *, struct file *);
 
-// TODO: Kaunsi file ke kaunse page currently loaded hain, to solve the sharing issue
-
 #endif /* filesys/file.h */
