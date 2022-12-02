@@ -32,6 +32,4 @@ void *find_sharing_entry(struct hash *sharing_table, char *file_name, unsigned p
 bool delete_sharing_frame(struct hash *sharing_table, struct inner_share_entry *isentry);
 void destroy_share_table(struct hash *share_table);
 
-// TODO; think about sharing table destruction memory leak
-
 #endif /* vm/sharing.h */ 

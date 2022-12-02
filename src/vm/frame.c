@@ -1,6 +1,7 @@
 #include "threads/malloc.h"
 #include "lib/kernel/hash.h"
 #include "threads/thread.h"
+#include "userprog/pagedir.h"
 #include "frame.h"
 
 static hash_hash_func frame_hash_func;  // hash function for frame table
@@ -29,15 +30,26 @@ evict_frame(struct hash *frame_table, struct hash_iterator *it)
 {
     struct hash_elem *he;
     struct frame_entry *fe;
+    struct list_elem *e;
     while((he = get_next(it, frame_table)))
-    {
+    {   
+        bool rr = false;
         fe = hash_entry(he, struct frame_entry, elem);
-        if (fe->reference_bit)
-        {
-            fe->reference_bit = false;
-            continue;
+        for (e = list_begin(&fe->owners);
+             e != list_end(&fe->owners);
+             e = list_next(e))
+        {   
+            struct owner *frame_owner = list_entry(e, struct owner, elem);
+            rr |= 
+                pagedir_is_accessed(frame_owner->t->pagedir, frame_owner->upage);
+            pagedir_set_accessed(frame_owner->t->pagedir, 
+                                 frame_owner->upage,
+                                 false);
         }
-        break;
+        if (rr)
+        {
+            break;
+        }
     }
 
     if (he)
