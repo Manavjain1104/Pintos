@@ -190,12 +190,11 @@ palloc_get_page (enum palloc_flags flags)
           // swap
           spe->location_prev = spe->location;
           spe->location = SWAP_SLOT;
-          // printf("KVA:%p\n", fe->kva);
           size_t slot = swap_out(fe->kva);
           spe->swap_slot = slot;
-          // printf("SWAP_OUT: %d\n", slot);
         } else {
           // forget about page
+          printf("1st free entryy %p\n", frame_owner->upage);
           free_entry(&frame_owner->t->sp_table, frame_owner->upage);
         }
         
@@ -222,6 +221,7 @@ palloc_get_page (enum palloc_flags flags)
       // means page is either an all_zero page
       if (spe->location == ALL_ZERO)
       {
+        printf("2nd free entryy %p\n", frame_owner->upage);
         free_entry(&frame_owner->t->sp_table, frame_owner->upage);
 
         /* reset frame_entry for new page */
@@ -249,7 +249,7 @@ palloc_get_page (enum palloc_flags flags)
         e = list_next(e);
         struct owner *o = list_entry(temp, struct owner, elem);
 
-        free_entry(&o->t->sp_table, o->upage);
+        // free_entry(&o->t->sp_table, o->upage);
 
         /* reset frame_entry for new page */
         if (flags & PAL_ZERO)

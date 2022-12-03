@@ -68,11 +68,14 @@ destroy_spt_table(struct hash *spt_table)
 static void spt_destroy_func (struct hash_elem *e, void *aux UNUSED)
 {   
     struct spt_entry *spe = hash_entry(e, struct spt_entry, elem);
-    if (spe->location == SWAP_SLOT)
-    {   
-        swap_drop (spe->swap_slot);
-    }
-    free(hash_entry(e, struct spt_entry, elem));
+    // if (spe->location == SWAP_SLOT)
+    // {   
+    //     // void *fake_page = palloc_get_page(PAL_ASSERT | PAL_ZERO);
+    //     // swap_in (fake_page, spe->swap_slot);
+    //     // palloc_free_page(fake_spage);
+    //     // swap_drop (spe->swap_slot);
+    // }
+    free(spe);
 }
 
 static unsigned spt_hash_func(const struct hash_elem *e, void *aux UNUSED)

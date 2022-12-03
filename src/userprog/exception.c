@@ -202,13 +202,13 @@ page_fault (struct intr_frame *f)
       // printf("FAULTING UPAGE: %p  fault_addr:%p\n", fake_sptentry.upage, fault_addr);
 
       struct hash_elem *found = hash_find (&spt, &fake_sptentry.elem);
-
       /* Use SPT data to handle page fault */
       if (found)
       {
          struct spt_entry *spe = hash_entry(found, struct spt_entry, elem);
          if (!spe->writable && write)
          {
+            printf("user write to read only page\n");
             // user tried to write to a read only page
             goto failure;
          }
@@ -226,7 +226,6 @@ page_fault (struct intr_frame *f)
          {
                /* Page must exist in a swap slot */
                ASSERT (spe->location == SWAP_SLOT);
-               // printf("SWAPSWAP \n");
                // TODO : does this install also??? WHat about required evictions
                void *kpage = palloc_get_page(PAL_USER);
                ASSERT(kpage);
@@ -267,10 +266,9 @@ page_fault (struct intr_frame *f)
            /* Checking for overflow of stack pages */
            void *next_upage = pg_round_down(fault_addr);
 
-           // TODO Check with Mark why this is working
-           if (next_upage - PHYS_BASE > STACK_MAX_SIZE)
+           if ((PHYS_BASE - next_upage) > STACK_MAX_SIZE)
            {
-              goto failure;
+               delete_thread(-1);
            }
            uint8_t *k_new_page = get_and_install_page(PAL_USER | PAL_ZERO, 
                                 next_upage, 
@@ -296,9 +294,8 @@ page_fault (struct intr_frame *f)
           return;
         }
       }
-
     }
- 
+
  failure:
    /* Handle page_faults gracefully for user invalid access. */
    if (t->in_sys_call) 

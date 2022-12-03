@@ -49,7 +49,7 @@ swap_out (const void *vaddr)
   lock_release (&swap_lock);
   if (slot == BITMAP_ERROR) 
   {
-    printf("BITMAP_ERROR %u\n", BITMAP_ERROR);
+    // printf("BITMAP_ERROR %u\n", BITMAP_ERROR);
     return BITMAP_ERROR; 
   }
 

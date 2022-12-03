@@ -40,11 +40,17 @@ evict_frame(struct hash *frame_table, struct hash_iterator *it)
              e = list_next(e))
         {   
             struct owner *frame_owner = list_entry(e, struct owner, elem);
-            rr |= 
-                pagedir_is_accessed(frame_owner->t->pagedir, frame_owner->upage);
-            pagedir_set_accessed(frame_owner->t->pagedir, 
-                                 frame_owner->upage,
-                                 false);
+            // ASSERT(frame_owner->t->pagedir);
+            if (frame_owner->t->pagedir)
+            {
+                bool booltocheck = pagedir_is_accessed(frame_owner->t->pagedir, frame_owner->upage);
+                rr |= 
+                    booltocheck;
+                pagedir_set_accessed(frame_owner->t->pagedir, 
+                                    frame_owner->upage,
+                                    false);
+
+            }
         }
         if (rr)
         {
