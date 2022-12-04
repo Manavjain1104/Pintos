@@ -169,7 +169,10 @@ process_exit (void)
   uint32_t *pd;
       
   /* destroy supplemental page_table */
-  lock_acquire(&cur->spt_lock);
+  if (!lock_held_by_current_thread (&cur->spt_lock))
+  {
+    lock_acquire(&cur->spt_lock);
+  }
   destroy_spt_table(&cur->sp_table);
   lock_release(&cur->spt_lock);
 

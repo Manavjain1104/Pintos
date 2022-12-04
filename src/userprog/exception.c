@@ -208,26 +208,27 @@ page_fault (struct intr_frame *f)
          {
             printf("user write to read only page\n");
             // user tried to write to a read only page
+            lock_release(&t->spt_lock);
             goto failure;
          }
 
          /* Code reaching here indicates that access was valid, load neccesary */ 
          if (spe->location == FILE_SYS || spe->location == ALL_ZERO)
          {
-               if (!actual_load_page(spe))
-               {  
+            if (!actual_load_page(spe))
+            {  
                printf("Failed to load spt page entry at addr: %p\n", fault_addr);
+               lock_release(&t->spt_lock);
                goto failure;
-               }
+            }
          } 
          else
          {
                /* Page must exist in a swap slot */
                ASSERT (spe->location == SWAP_SLOT);
-               // TODO : does this install also??? WHat about required evictions
+
                void *kpage = palloc_get_page(PAL_USER);
                ASSERT(kpage);
-               // printf("SWAP_IN:%d \n", spe->swap_slot);
                swap_in (kpage, spe->swap_slot); 
                if (!install_page(spe->upage, kpage, spe->writable))
                {
@@ -265,9 +266,10 @@ page_fault (struct intr_frame *f)
         {
            /* Checking for overflow of stack pages */
            void *next_upage = pg_round_down(fault_addr);
-
-           if ((PHYS_BASE - next_upage) > STACK_MAX_SIZE)
+         //   printf("diff: %u \n",(PHYS_BASE - next_upage));
+           if ((unsigned) (PHYS_BASE - next_upage) > (unsigned) STACK_MAX_SIZE)
            {
+               // printf("lolol \n");
                delete_thread(-1);
            }
            uint8_t *k_new_page = get_and_install_page(PAL_USER | PAL_ZERO, 
@@ -281,6 +283,7 @@ page_fault (struct intr_frame *f)
            if (!k_new_page)
            {
               printf("Cound not allocate new page for stack\n");
+              lock_release(&t->spt_lock);
               goto failure;
            }
 
@@ -298,7 +301,6 @@ page_fault (struct intr_frame *f)
     }
 
  failure:
-   lock_release(&t->spt_lock);
 
    /* Handle page_faults gracefully for user invalid access. */
    if (t->in_sys_call) 
