@@ -50,8 +50,11 @@ static bool page_from_pool (const struct pool *, void *page);
 /* stroing meta data about the memory frames */
 struct hash frame_table;
 
-/* frame table iterator for SECOND-CHANCE EVICTION */
-struct hash_iterator index;
+/* queue iterator for SECOND-CHANCE EVICTION */
+struct list_elem *index;
+
+/* queue for SECOND-CHANCE EVICTION ALGORITHM */
+struct list queue;
 
 /* stroing sharing data for files */
 struct hash share_table;
@@ -89,7 +92,8 @@ palloc_init (size_t user_page_limit)
     PANIC("Could not generate frame table! \n");
   }
 
-  hash_first(&index, &frame_table);
+  list_init(&queue);
+  index = list_begin(&queue);
 
   /* initialise the frame table */
   if (!generate_sharing_table(&share_table))
@@ -156,11 +160,12 @@ palloc_get_page (enum palloc_flags flags)
   void *kpage =  palloc_get_multiple (flags, 1);
 
   if (flags & PAL_USER)
-  {
+  { 
     lock_acquire(&frame_lock);
     if (kpage == NULL)
     {
-      struct frame_entry *fe = evict_frame(&frame_table, &index);
+      struct frame_entry *fe = evict_frame(&queue, &index);
+      // printf("%p\n",fe);
       // printf("Evicted page Kva: %p \n", fe->kva);
 
       if (!fe)                                                  
@@ -174,6 +179,10 @@ palloc_get_page (enum palloc_flags flags)
       }
 
       /* signal for swapping/free, remove */
+      // if (fe->kva == (void *)0xc027c000)
+      // {
+      //   // printf("Just evicted 0xc027c000\n");  
+      // }
       ASSERT(fe->owners_list_size > 0);
       struct list_elem *e = list_begin(&fe->owners);
       ASSERT(e);
@@ -189,6 +198,7 @@ palloc_get_page (enum palloc_flags flags)
       struct spt_entry *spe 
           = find_spe(&frame_owner->t->sp_table, frame_owner->upage);
       ASSERT(spe != NULL);
+
       /* page can be swapped if dirty */
       if (pagedir_is_writable(frame_owner->t->pagedir, frame_owner->upage))
       {
@@ -198,12 +208,11 @@ palloc_get_page (enum palloc_flags flags)
           // swap
           spe->location_prev = spe->location;
           spe->location = SWAP_SLOT;
-          size_t slot = swap_out(fe->kva);
-          spe->swap_slot = slot;
+          spe->swap_slot = swap_out(fe->kva);;
         } else {
           // forget about page
-          ASSERT(false);
-          printf("1st free entryy %p\n", frame_owner->upage);
+          // ASSERT(false);
+          // printf("1st free entryy %p\n", frame_owner->upage);
           free_entry(&frame_owner->t->sp_table, frame_owner->upage);
         }
 
@@ -232,6 +241,13 @@ palloc_get_page (enum palloc_flags flags)
         {
           PANIC ("PAL_ASSERT failed during page palloc! \n");  
         }
+        // if (fe->kva == (void *)0xc027c000)
+        // {
+        //   printf("Evicted 0xc027c000\n");
+        //   // ASSERT (false);
+        //   // debug_backtrace();
+        //   printf("----- \n");
+        // }
         return fe->kva;
       }
 
@@ -308,13 +324,16 @@ palloc_get_page (enum palloc_flags flags)
       return fe->kva;
     } 
 
+    // printf("PALLOC CALLED %p\n", kpage);
+    // ASSERT(false);
+
     /* insert new entry into page table */
     struct frame_entry *frame_pt  = malloc(sizeof(struct frame_entry));
     list_init (&frame_pt->owners);
     frame_pt->kva = kpage;
     frame_pt->owners_list_size = 0;
     frame_pt->inner_entry = NULL;
-    insert_frame(&frame_table, frame_pt, &index);
+    insert_frame(&frame_table, &queue, frame_pt);
     lock_release(&frame_lock);
   }
 
@@ -387,7 +406,7 @@ palloc_free_page (void *page)
         ASSERT(owner_obj);
         free(owner_obj);
       }
-      ASSERT(free_frame(&frame_table, page, &index));
+      ASSERT(free_frame(&frame_table, &queue, page, &index));
       lock_release(&share_lock);
       lock_release(&frame_lock);
     } else {

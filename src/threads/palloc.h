@@ -15,7 +15,8 @@ extern struct hash frame_table;
 extern struct hash share_table;
 extern struct lock share_lock;
 extern struct lock frame_lock;
-extern struct hash_iterator index;
+extern struct list_elem *index;
+extern struct list queue;
 
 void palloc_init (size_t user_page_limit);
 void *palloc_get_page (enum palloc_flags);

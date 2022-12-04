@@ -7,6 +7,7 @@
 #include <string.h>
 #include "userprog/gdt.h"
 #include "userprog/pagedir.h"
+#include "userprog/exception.h"
 #include "userprog/syscall.h"
 #include "userprog/tss.h"
 #include "filesys/directory.h"
@@ -272,7 +273,7 @@ struct Elf32_Phdr
 
 /* Flags for p_flags.  See [ELF3] 2-3 and 2-4. */
 #define PF_X 1          /* Executable. */
-#define PF_W 2          /* Writable. */
+// #define PF_W 2          /* Writable. */
 #define PF_R 4          /* Readable. */
 
 static bool setup_stack (void **esp, char *fn_copy, char *saveptr);
@@ -409,7 +410,10 @@ load (char *file_name, void (**eip) (void), void **esp)
 
   /* Set up stack. */
   if (!setup_stack (esp, file_name, saveptr))
+  {
+    // ASSERT(false);
     goto done;
+  }
 
   /* Start address. */
   *eip = (void (*) (void)) ehdr.e_entry;
@@ -545,126 +549,123 @@ load_segment (off_t ofs, uint8_t *upage,
 static bool
 setup_stack (void **esp, char *fn_copy, char *saveptr)
 {
-  uint8_t *kpage;
-  bool success = false;
-
-  kpage = palloc_get_page (PAL_USER | PAL_ZERO);
+  // kpage = palloc_get_page (PAL_USER | PAL_ZERO);
+  struct thread *t = thread_current();
+  uint8_t *kpage = get_and_install_page(PAL_USER | PAL_ZERO, 
+                       ((uint8_t *) PHYS_BASE) - PGSIZE,
+                       t->pagedir,
+                       true, false, NULL, -1);
+  ASSERT(kpage);
   if (kpage != NULL) 
     {
-      success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);
-
+      // success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);
+      
       *esp = PHYS_BASE;
-      if (success) {
+      /* Establishing initial stack page for current thread */
+      struct spt_entry * spe = malloc(sizeof(struct spt_entry));
+      spe -> upage = ((uint8_t *) PHYS_BASE) - PGSIZE;
+      spe -> location = STACK;
+      spe -> writable = true;
+      lock_acquire(&t->spt_lock);
+      ASSERT(!insert_spe(&t->sp_table, spe));
+      lock_release(&t->spt_lock);
 
-        struct thread *t = thread_current();
+      /* Total bytes required for stack setup */
+      unsigned total_bytes = strlen(fn_copy) + 1;
 
-        /* Establishing initial stack page for current thread */
-        struct spt_entry * spe = malloc(sizeof(struct spt_entry));
-        spe -> upage = ((uint8_t *) PHYS_BASE) - PGSIZE;
-        spe -> location = STACK;
-        spe -> writable = true;
-        lock_acquire(&t->spt_lock);
-        ASSERT(!insert_spe(&t->sp_table, spe));
-        lock_release(&t->spt_lock);
-
-        /* Total bytes required for stack setup */
-        unsigned total_bytes = strlen(fn_copy) + 1;
-
-        int argc = 1;
-        char *pt;
-        bool prevspace = false;
-        for (pt = saveptr; *pt != '\0'; pt++) {
-          if (*pt == ' ')
-          {
-            if (!prevspace)
-            { 
-              argc++;
-              total_bytes++;
-            }
-            prevspace = true;
-          } else {
-            prevspace = false;
+      int argc = 1;
+      char *pt;
+      bool prevspace = false;
+      for (pt = saveptr; *pt != '\0'; pt++) {
+        if (*pt == ' ')
+        {
+          if (!prevspace)
+          { 
+            argc++;
             total_bytes++;
           }
-        }
-        if (prevspace)
-        {
-          argc--;
-        }
-        if (pt > saveptr)
-        {
-          argc++;
+          prevspace = true;
+        } else {
+          prevspace = false;
           total_bytes++;
         }
-
-        /* Word_align the top arguments and set argv[argc] to null */
-        int len_align = 0;
-        if ((total_bytes % WORD_LENGTH) > 0) 
-        {
-          len_align = WORD_LENGTH - (total_bytes % WORD_LENGTH);
-        }
-
-        total_bytes += len_align 
-                       + (argc + 1) * sizeof(char *) 
-                       + sizeof(char **) 
-                       + sizeof(int) 
-                       + sizeof(void *);
-
-        /* Pre-checking for overflow in user stack */
-        if (PGSIZE < total_bytes) 
-        {
-          return false;
-        }
-
-        /* Start updating user stack */
-        char **arg_pt_arr = (char **) malloc(sizeof(char*) * argc);
-        char *arg;
-        int len = strlen(fn_copy) + 1;
-        *esp = *esp - len;
-        arg_pt_arr[0] = *esp;
-        strlcpy(*esp, fn_copy, len);
-
-        /* set up arguments on the top of stack */
-        int i = 1;
-        while ((arg = strtok_r(NULL, " ", &saveptr))) 
-        {
-          if (strlen(arg) == 0)
-          {
-            continue;
-          }
-          len = strlen(arg) + 1;
-          *esp = *esp - len;
-          arg_pt_arr[i] = (char *) *esp;
-          i++;
-          strlcpy(*esp, arg, len);
-        }
-
-        /* Check that strtok_r got the right number of args */
-
-        ASSERT(argc == i); 
-        *esp = *esp - len_align - sizeof(char *);
-
-  
-        /* Set up the pointer to arguments */
-        for (i = argc - 1; i >= 0; i--) 
-        {
-          *esp = *esp - sizeof(char *);
-          memcpy(*esp, &arg_pt_arr[i], sizeof(char *));
-        }
-
-        free(arg_pt_arr);
-
-        /* Set up argv and argc on the stack */
-        memcpy((*esp - sizeof(char *)), esp, sizeof(char *));
-        *esp = *esp - sizeof(char *) - sizeof(int);
-        memcpy(*esp, &argc, sizeof(int));
-        /* Set up fake return address */
-        *esp = *esp - sizeof(void *);
       }
-      else
-        palloc_free_page (kpage);
-    }
-  return success;
+      if (prevspace)
+      {
+        argc--;
+      }
+      if (pt > saveptr)
+      {
+        argc++;
+        total_bytes++;
+      }
+
+      /* Word_align the top arguments and set argv[argc] to null */
+      int len_align = 0;
+      if ((total_bytes % WORD_LENGTH) > 0) 
+      {
+        len_align = WORD_LENGTH - (total_bytes % WORD_LENGTH);
+      }
+
+      total_bytes += len_align 
+                      + (argc + 1) * sizeof(char *) 
+                      + sizeof(char **) 
+                      + sizeof(int) 
+                      + sizeof(void *);
+
+      /* Pre-checking for overflow in user stack */
+      if (PGSIZE < total_bytes) 
+      {
+        return false;
+      }
+
+      /* Start updating user stack */
+      char **arg_pt_arr = (char **) malloc(sizeof(char*) * argc);
+      char *arg;
+      int len = strlen(fn_copy) + 1;
+      *esp = *esp - len;
+      arg_pt_arr[0] = *esp;
+      strlcpy(*esp, fn_copy, len);
+
+      /* set up arguments on the top of stack */
+      int i = 1;
+      while ((arg = strtok_r(NULL, " ", &saveptr))) 
+      {
+        if (strlen(arg) == 0)
+        {
+          continue;
+        }
+        len = strlen(arg) + 1;
+        *esp = *esp - len;
+        arg_pt_arr[i] = (char *) *esp;
+        i++;
+        strlcpy(*esp, arg, len);
+      }
+
+      /* Check that strtok_r got the right number of args */
+
+      ASSERT(argc == i); 
+      *esp = *esp - len_align - sizeof(char *);
+
+
+      /* Set up the pointer to arguments */
+      for (i = argc - 1; i >= 0; i--) 
+      {
+        *esp = *esp - sizeof(char *);
+        memcpy(*esp, &arg_pt_arr[i], sizeof(char *));
+      }
+
+      free(arg_pt_arr);
+
+      /* Set up argv and argc on the stack */
+      memcpy((*esp - sizeof(char *)), esp, sizeof(char *));
+      *esp = *esp - sizeof(char *) - sizeof(int);
+      memcpy(*esp, &argc, sizeof(int));
+      /* Set up fake return address */
+      *esp = *esp - sizeof(void *);
+      return true;
+    } 
+  return false;
 }
 
 /* Adds a mapping from user virtual address UPAGE to kernel

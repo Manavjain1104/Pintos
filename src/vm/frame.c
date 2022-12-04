@@ -3,6 +3,7 @@
 #include "threads/thread.h"
 #include "userprog/pagedir.h"
 #include "frame.h"
+#include <stdio.h>
 
 static hash_hash_func frame_hash_func;  // hash function for frame table
 static hash_less_func frame_less_func;  // hash less function for frame table
@@ -16,66 +17,76 @@ generate_frame_table(struct hash *frame_table)
 }
 
 void 
-insert_frame(struct hash *frame_table, 
-             struct frame_entry *frame,
-             struct hash_iterator *it)
+insert_frame(struct hash *frame_table,
+             struct list *queue,
+             struct frame_entry *frame)
 {
     struct hash_elem *he = hash_insert(frame_table, &frame->elem);
     ASSERT(!he);
-    hash_first(it, frame_table);
+    list_push_back(queue, &frame->l_elem);
 }
 
 struct frame_entry *
-evict_frame(struct hash *frame_table, struct hash_iterator *it)
+evict_frame(struct list *queue,
+            struct list_elem **index)
 {
-    struct hash_elem *he;
     struct frame_entry *fe;
     struct list_elem *e;
-    while((he = get_next(it, frame_table)))
+    if (*index == list_end(queue)) {
+        *index = list_begin(queue);
+        if (*index == list_end(queue)) {
+            return NULL;
+        }
+    }
+    while (true)
     {   
         bool rr = false;
-        fe = hash_entry(he, struct frame_entry, elem);
+        fe = list_entry(*index, struct frame_entry, l_elem);
         for (e = list_begin(&fe->owners);
              e != list_end(&fe->owners);
              e = list_next(e))
         {   
             struct owner *frame_owner = list_entry(e, struct owner, elem);
-            // ASSERT(frame_owner->t->pagedir);
             if (frame_owner->t->pagedir)
             {
-                bool booltocheck = pagedir_is_accessed(frame_owner->t->pagedir, frame_owner->upage);
                 rr |= 
-                    booltocheck;
+                    pagedir_is_accessed(frame_owner->t->pagedir, frame_owner->upage);
                 pagedir_set_accessed(frame_owner->t->pagedir, 
                                     frame_owner->upage,
                                     false);
 
             }
         }
-        if (rr)
+        get_next(index, queue);
+        // printf("index:%p\n", *index);
+        if (!rr)
         {
             break;
         }
     }
+    // printf("size return %d\n", fe->owners_list_size);
+    return fe;
 
-    if (he)
-    {
-        return hash_entry(he, struct frame_entry, elem);
-    }
-    return NULL;
 }
 
 bool
-free_frame(struct hash *frame_table, void *kva, struct hash_iterator *it)
+free_frame(struct hash *frame_table,
+           struct list *queue,
+           void *kva, 
+           struct list_elem **index)
 {   
     struct frame_entry fake_frame;
     fake_frame.kva = kva;
     struct hash_elem *he = hash_delete(frame_table, &fake_frame.elem);
-    hash_first(it, frame_table);
     if (he != NULL)
     {
         // mathced an entry
         struct frame_entry *fe = hash_entry(he, struct frame_entry, elem);
+        if (*index == &fe->l_elem)
+        {
+            get_next(index, queue);
+        }
+        list_remove(&fe->l_elem);
         free(fe);
         return true;
     }
@@ -112,14 +123,23 @@ static void frame_destroy_func (struct hash_elem *e, void *aux UNUSED)
     free(hash_entry(e, struct frame_entry, elem));
 }
 
-struct hash_elem *
-get_next(struct hash_iterator *it, struct hash *frames)
-{
-    struct hash_elem *he = hash_next(it);
-    if (he)
+void
+get_next(struct list_elem **index, struct list *queue_pt)
+{   
+    // edge case when tail at start
+    if (list_end(queue_pt) == *index)
     {
-        return he;
+        *index = list_begin(queue_pt);
+        return;
     }
-    hash_first(it, frames);
-    return hash_next(it);
+    
+    // move the index along
+    *index = list_next(*index);
+    
+    // check circular fashion
+    if (list_end(queue_pt) == *index)
+    {
+        *index = list_begin(queue_pt);
+    }
+    ASSERT (*index);
 }

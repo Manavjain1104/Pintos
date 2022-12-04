@@ -1,12 +1,10 @@
 #include "userprog/exception.h"
 #include "userprog/process.h"
 #include "userprog/syscall.h"
-#include <inttypes.h>
 #include <stdio.h>
 #include "userprog/gdt.h"
 #include "threads/interrupt.h"
 #include "threads/thread.h"
-#include "threads/palloc.h"
 #include "threads/vaddr.h"
 #include "vm/spt.h"
 #include "vm/mmap.h"
@@ -20,17 +18,11 @@
 /* Number of page faults processed. */
 static long long page_fault_cnt;
 
+static struct lock l;
+
 static void kill (struct intr_frame *);
 static void page_fault (struct intr_frame *);
 static bool actual_load_page(struct spt_entry *spe);
-static uint8_t *
-get_and_install_page(enum palloc_flags flags, 
-                     void *upage, 
-                     uint32_t *pagedir, 
-                     bool writable,
-                     bool is_filesys,
-                     char *name,
-                     unsigned int page_num);
 static bool 
 actual_load_mmap_page(struct page_mmap_entry *pentry);
 
@@ -78,6 +70,8 @@ exception_init (void)
      We need to disable interrupts for page faults because the
      fault address is stored in CR2 and needs to be preserved. */
   intr_register_int (14, 0, INTR_OFF, page_fault, "#PF Page-Fault Exception");
+
+  lock_init(&l);
 }
 
 /* Prints exception statistics. */
@@ -227,16 +221,23 @@ page_fault (struct intr_frame *f)
                /* Page must exist in a swap slot */
                ASSERT (spe->location == SWAP_SLOT);
 
-               void *kpage = palloc_get_page(PAL_USER);
-               ASSERT(kpage);
-               swap_in (kpage, spe->swap_slot); 
-               if (!install_page(spe->upage, kpage, spe->writable))
+               // void *kpage = palloc_get_page(PAL_USER);
+               spe->location = spe->location_prev;
+               void *kpage = get_and_install_page(
+                        PAL_USER,
+                        spe->upage,
+                        t->pagedir,
+                        spe->writable,
+                        spe->location==FILE_SYS,
+                        t->file_name,
+                        (spe->absolute_off - (spe->absolute_off % PGSIZE)) / PGSIZE);
+
+               if (!kpage)
                {
-                  printf("Could not install swapped in page \n");
-                  palloc_free_page(kpage);
+                  printf ("Could not allocate page during swap in \n");
                   goto failure;
                }
-               spe->location = spe->location_prev;
+               swap_in (kpage, spe->swap_slot);
          }
          lock_release(&t->spt_lock);
          return;
@@ -402,7 +403,7 @@ actual_load_mmap_page(struct page_mmap_entry *pentry)
 
 /* pallocs and intsalls upage in the current thread's directory
 if not already instlaled (sharing); returns null when fails */
-static uint8_t *
+uint8_t *
 get_and_install_page(enum palloc_flags flags, 
                      void *upage, 
                      uint32_t *pagedir, 
@@ -411,7 +412,6 @@ get_and_install_page(enum palloc_flags flags,
                      char *name,
                      unsigned int page_num)
 {
-   // intr_disable();
    uint8_t *kpage = pagedir_get_page (pagedir, upage);
 
    if (kpage == NULL)
@@ -443,21 +443,33 @@ get_and_install_page(enum palloc_flags flags,
       lock_release(&share_lock);
       lock_release(&frame_lock);
     }
-     /* Get a new page of memory. */
-     kpage = palloc_get_page (flags);
-     if (kpage == NULL)
-     {   
-      free(frame_owner);
-      return NULL;
-     }
-      
-     struct frame_entry *kframe_entry;
+
+   /* Get a new page of memory. */
+   // lock_acquire(&l);
+   kpage = palloc_get_page (flags);
+   // if (kpage == (void *)0xc027c000)
+   // {
+   //    printf("returned 0xc027c000\n");
+   // }
+   // lock_release(&l);
+   if (kpage == NULL)
+   {   
+    free(frame_owner);
+    return NULL;
+   }
+    
+   struct frame_entry *kframe_entry;
 
    lock_acquire(&frame_lock);
    kframe_entry = find_frame_entry(&frame_table, kpage);
    list_push_back(&kframe_entry->owners, &frame_owner->elem);
    kframe_entry->owners_list_size++;
+   // if (kpage == (void *)0xc027c000)
+   // {
+   //    // printf("inc 0xc027c000\n");
+   // }
    lock_release(&frame_lock);
+
 
      /* Add the page to the process's address space. */
      if (!install_page (upage, kpage, writable)) 
