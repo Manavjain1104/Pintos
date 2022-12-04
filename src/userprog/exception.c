@@ -198,9 +198,7 @@ page_fault (struct intr_frame *f)
       void *fault_upage = pg_round_down(fault_addr);
       fake_sptentry.upage = fault_upage;
 
-      // printf("EIP: %p\n", f->eip);
-      // printf("FAULTING UPAGE: %p  fault_addr:%p\n", fake_sptentry.upage, fault_addr);
-
+      lock_acquire(&t->spt_lock);
       struct hash_elem *found = hash_find (&spt, &fake_sptentry.elem);
       /* Use SPT data to handle page fault */
       if (found)
@@ -239,6 +237,7 @@ page_fault (struct intr_frame *f)
                }
                spe->location = spe->location_prev;
          }
+         lock_release(&t->spt_lock);
          return;
       }
 
@@ -253,6 +252,7 @@ page_fault (struct intr_frame *f)
          {
             NOT_REACHED();
          }
+         lock_release(&t->spt_lock);
          return;
       }
 
@@ -290,13 +290,16 @@ page_fault (struct intr_frame *f)
           spe -> upage = next_upage;
           spe -> location = STACK;
           spe -> writable = true;
-          insert_spe(&thread_current()->sp_table, spe);
+          ASSERT(!insert_spe(&thread_current()->sp_table, spe));
+          lock_release(&t->spt_lock);
           return;
         }
       }
     }
 
  failure:
+   lock_release(&t->spt_lock);
+
    /* Handle page_faults gracefully for user invalid access. */
    if (t->in_sys_call) 
    {

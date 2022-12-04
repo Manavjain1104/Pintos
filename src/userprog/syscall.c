@@ -572,16 +572,19 @@ mmap_handler(struct intr_frame *f)
   struct thread *t = thread_current();
 
   /* Check for any memory page overlaps */
+  lock_acquire(&t->spt_lock);
   for (unsigned i = (unsigned) addr; i <= (unsigned) last_page; i += PGSIZE)
   {
     if (pagedir_get_page(t->pagedir, (void *) i) != NULL
        || contains_upage(&t->sp_table, (void *) i)
        || get_mmap_page(&t->page_mmap_table, (void *) i) != NULL)
     {
+      lock_release(&t->spt_lock);
       f->eax = -1;
       return;
     }
   }
+  lock_release(&t->spt_lock);
 
   f->eax = insert_mmap(&t->page_mmap_table, &t->file_mmap_table, (void *) addr, fd_obj);
 }

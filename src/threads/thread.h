@@ -8,6 +8,7 @@
 #include "fixed-point.h"
 #include "filesys/file.h"
 #include "devices/timer.h"
+#include "threads/synch.h"
 #include "lib/kernel/hash.h"
 
 #define MAX_FILE_NAME_SIZE 14
@@ -148,6 +149,9 @@ struct thread
 
     /* next mapping id for memory mapped files table */
     unsigned mapid_next;
+
+    /* lock to synchronize acces to the spt table */
+    struct lock spt_lock;
 
     /* file name for loading executable file */
     char file_name[MAX_FILE_NAME_SIZE];
