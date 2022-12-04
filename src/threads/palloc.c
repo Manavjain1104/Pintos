@@ -208,12 +208,14 @@ palloc_get_page (enum palloc_flags flags)
           // swap
           spe->location_prev = spe->location;
           spe->location = SWAP_SLOT;
-          spe->swap_slot = swap_out(fe->kva);;
+          spe->swap_slot = swap_out(fe->kva);
+          printf("swap out: %u kpage bytes: %x\n", spe->swap_slot, * (int *)fe->kva);
+
         } else {
           // forget about page
           // ASSERT(false);
           // printf("1st free entryy %p\n", frame_owner->upage);
-          free_entry(&frame_owner->t->sp_table, frame_owner->upage);
+          // free_entry(&frame_owner->t->sp_table, frame_owner->upage);
         }
 
         /* reset frame_entry for new page */
