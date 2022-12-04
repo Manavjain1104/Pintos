@@ -178,7 +178,14 @@ palloc_get_page (enum palloc_flags flags)
       struct list_elem *e = list_begin(&fe->owners);
       ASSERT(e);
       struct owner *frame_owner = list_entry(e, struct owner, elem);
-      // lock_acquire(&frame_owner->t->spt_lock);
+      bool prev_owner 
+        = lock_held_by_current_thread (&frame_owner->t->spt_lock);
+      if (!prev_owner)
+      {
+        printf("acquring \n");
+        lock_acquire(&frame_owner->t->spt_lock);
+        printf("acquired\n");
+      }
       struct spt_entry *spe 
           = find_spe(&frame_owner->t->sp_table, frame_owner->upage);
       ASSERT(spe != NULL);
@@ -195,10 +202,11 @@ palloc_get_page (enum palloc_flags flags)
           spe->swap_slot = slot;
         } else {
           // forget about page
+          ASSERT(false);
           printf("1st free entryy %p\n", frame_owner->upage);
           free_entry(&frame_owner->t->sp_table, frame_owner->upage);
         }
-        
+
         /* reset frame_entry for new page */
         if (flags & PAL_ZERO)
         {
@@ -206,6 +214,13 @@ palloc_get_page (enum palloc_flags flags)
         }
         pagedir_clear_page(frame_owner->t->pagedir, frame_owner->upage);
         ASSERT(fe->owners_list_size == 1);
+
+        if (!prev_owner)
+        {
+          printf("releasing 1\n");
+          lock_release(&frame_owner->t->spt_lock);
+        }
+
         list_remove(&frame_owner->elem);
         free(frame_owner);
         ASSERT(!fe->inner_entry);
@@ -219,11 +234,13 @@ palloc_get_page (enum palloc_flags flags)
         }
         return fe->kva;
       }
+
+      // ASSERT (lock_held_by_current_thread (&frame_owner->t->spt_lock));
       
       // means page is either an all_zero page
       if (spe->location == ALL_ZERO)
       {
-        printf("2nd free entryy %p\n", frame_owner->upage);
+        // printf("2nd free entryy %p\n", frame_owner->upage);
         // free_entry(&frame_owner->t->sp_table, frame_owner->upage);
 
         /* reset frame_entry for new page */
@@ -233,17 +250,32 @@ palloc_get_page (enum palloc_flags flags)
         }
         pagedir_clear_page(frame_owner->t->pagedir, frame_owner->upage);
         ASSERT(fe->owners_list_size == 1);
+
+        if (!prev_owner)
+        {
+          printf("releasing 2\n");
+          lock_release(&frame_owner->t->spt_lock);
+        }
+        
         list_remove(&frame_owner->elem);
         free(frame_owner);
         ASSERT(!fe->inner_entry);
         fe->owners_list_size = 0;
-        // lock_release(&frame_owner->t->spt_lock);
         lock_release(&frame_lock);
         return fe->kva;
       }
 
+      // ASSERT (lock_held_by_current_thread (&frame_owner->t->spt_lock));
+
       // in the case of sharing - multiple owners
       ASSERT(spe->location == FILE_SYS)
+
+      if (!prev_owner)
+      {
+        printf("releasing 2\n");
+        lock_release(&frame_owner->t->spt_lock);
+      }
+
       struct list_elem *temp;
       
       for (; e != list_end (&fe->owners);)
@@ -251,8 +283,6 @@ palloc_get_page (enum palloc_flags flags)
         temp = e;
         e = list_next(e);
         struct owner *o = list_entry(temp, struct owner, elem);
-
-        // free_entry(&o->t->sp_table, o->upage);
 
         /* reset frame_entry for new page */
         if (flags & PAL_ZERO)
