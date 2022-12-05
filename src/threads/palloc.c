@@ -209,8 +209,7 @@ palloc_get_page (enum palloc_flags flags)
           spe->location_prev = spe->location;
           spe->location = SWAP_SLOT;
           spe->swap_slot = swap_out(fe->kva);
-          printf("swap out: %u kpage bytes: %x\n", spe->swap_slot, * (int *)fe->kva);
-
+          // printf("swap out: %u kpage bytes: %x\n", spe->swap_slot, * (int *)fe->kva);
         } else {
           // forget about page
           // ASSERT(false);

@@ -157,6 +157,7 @@ page_fault (struct intr_frame *f)
      be assured of reading CR2 before it changed). */
   intr_enable ();
 
+
   /* Count page faults. */
   page_fault_cnt++;
 
@@ -200,8 +201,8 @@ page_fault (struct intr_frame *f)
          struct spt_entry *spe = hash_entry(found, struct spt_entry, elem);
          if (!spe->writable && write)
          {
-            printf("user write to read only page\n");
             // user tried to write to a read only page
+            printf("user write to read only page\n");
             lock_release(&t->spt_lock);
             goto failure;
          }
@@ -209,6 +210,7 @@ page_fault (struct intr_frame *f)
          /* Code reaching here indicates that access was valid, load neccesary */ 
          if (spe->location == FILE_SYS || spe->location == ALL_ZERO)
          {
+            // printf("LAZY LOAD : %p\n", spe->upage);
             if (!actual_load_page(spe))
             {  
                printf("Failed to load spt page entry at addr: %p\n", fault_addr);
@@ -238,6 +240,8 @@ page_fault (struct intr_frame *f)
                   goto failure;
                }
                swap_in (kpage, spe->swap_slot);
+               pagedir_set_dirty(t->pagedir, spe->upage, true);
+               // printf("SWAP IN: %u and kpage : %x, upage: %p\n", spe->swap_slot, *(int *)kpage, spe->upage);
          }
          lock_release(&t->spt_lock);
          return;
