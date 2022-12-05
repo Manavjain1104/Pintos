@@ -453,3 +453,20 @@ bool donor_comparator (const struct list_elem *a,
     return (list_entry(a, struct thread, don_elem) -> priority)
        > (list_entry(b, struct thread, don_elem) -> priority);
 }
+
+bool re_lock_acquire (struct lock * lock)
+{
+  bool prev = !lock_held_by_current_thread (lock);
+  if (prev)
+  {
+    lock_acquire (lock);
+  }
+  return prev;
+}
+void re_lock_release (struct lock *lock, bool release)
+{
+  if (release)
+  {
+    lock_release (lock);
+  }
+}
