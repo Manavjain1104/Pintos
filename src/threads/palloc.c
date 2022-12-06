@@ -236,42 +236,9 @@ palloc_get_page (enum palloc_flags flags)
         return fe->kva;
       }
       
-      // means page is either an all_zero page
-      if (spe->location == ALL_ZERO)
-      {
-        /* reset frame_entry for new page */
-        if (flags & PAL_ZERO)
-        {
-          memset(fe->kva, 0,PGSIZE); 
-        }
-        pagedir_clear_page(frame_owner->t->pagedir, frame_owner->upage);
-        ASSERT(fe->owners_list_size == 1);
-
-        re_lock_release(&frame_owner->t->spt_lock, prev_spt);
-        if (prev_spt)
-        {
-          // printf("(PGP) Thread %d released spt lock of %d \n", thread_current()->tid, frame_owner->t->tid);
-        }
-        
-        list_remove(&frame_owner->elem);
-        free(frame_owner);
-        ASSERT(!fe->inner_entry);
-        fe->owners_list_size = 0;
-        re_lock_release(&frame_lock, prev_frame);
-        if (prev_frame)
-        {
-          // printf("(PGP) Thread %d released Frame lock\n", thread_current()->tid);
-        }
-        return fe->kva;
-      }
-
-      // in the case of sharing - multiple owners
-      ASSERT(spe->location == FILE_SYS)
+      // in the case of sharing - multiple owners or ALL_ZERO pages
+      ASSERT(spe->location == FILE_SYS || spe->location == ALL_ZERO)
       re_lock_release(&frame_owner->t->spt_lock, prev_spt);
-      if (prev_spt)
-      {
-        // printf("(PGP) Thread %d released spt lock of %d \n", thread_current()->tid, frame_owner->t->tid);
-      }
 
       struct list_elem *temp;      
       for (; e != list_end (&fe->owners);)
@@ -289,29 +256,16 @@ palloc_get_page (enum palloc_flags flags)
         pagedir_clear_page(o->t->pagedir, o->upage);
         list_remove(temp);
         free(o);
-        fe->owners_list_size = 0;
       }
       
       /* reset frame_entry for new page and remove sharing entry */
+      fe->owners_list_size = 0;
       bool prev_share = re_lock_acquire(&share_lock);
-      if (prev_share)
-      {
-        // printf("(PGP) Thread %d acquired Share lock\n", thread_current()->tid);
-      }
-      ASSERT(fe->inner_entry);
       delete_sharing_frame(&share_table, fe->inner_entry);
       re_lock_release(&share_lock, prev_share);
-      if (prev_share)
-      {
-        // printf("(PGP) Thread %d released Share lock\n", thread_current()->tid);
-      }
       fe->inner_entry = NULL;
       fe->owners_list_size = 0;
       re_lock_release(&frame_lock, prev_frame);
-      if (prev_frame)
-      {
-        // printf("(PGP) Thread %d released Frame lock\n", thread_current()->tid);
-      }
       return fe->kva;
     } 
 
