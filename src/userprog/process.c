@@ -170,12 +170,10 @@ process_exit (void)
   uint32_t *pd;
       
   /* destroy supplemental page_table */
-  if (!lock_held_by_current_thread (&cur->spt_lock))
-  {
-    lock_acquire(&cur->spt_lock);
-  }
+  bool prev_frame = re_lock_acquire(&frame_lock);
+  bool prev_spt = re_lock_acquire(&cur->spt_lock);
   destroy_spt_table(&cur->sp_table);
-  lock_release(&cur->spt_lock);
+  re_lock_release(&cur->spt_lock, prev_spt);
 
   destroy_mmap_tables();
 
@@ -195,6 +193,7 @@ process_exit (void)
       pagedir_activate (NULL);
       pagedir_destroy (pd);
     }
+  re_lock_release(&frame_lock, prev_frame);
 }
 
 /* Sets up the CPU for running user code in the current
@@ -302,16 +301,23 @@ load (char *file_name, void (**eip) (void), void **esp)
     goto done;
   process_activate ();
 
-  // TODO: check if the two calls below not successful
-  lock_init(&t->spt_lock);
-
   /* supplemental page table intialisation */
+  lock_init(&t->spt_lock);
+  lock_acquire(&frame_lock);
   lock_acquire(&t->spt_lock);
-  generate_spt_table(&t->sp_table);
+  if (!generate_spt_table(&t->sp_table))
+  {
+    lock_release(&t->spt_lock);
+    return false;
+  }
   lock_release(&t->spt_lock);
+  lock_release(&frame_lock);
 
   /* Memory mapped files table initialization */
-  generate_mmap_tables(&t->page_mmap_table, &t->file_mmap_table);
+  if (!generate_mmap_tables(&t->page_mmap_table, &t->file_mmap_table))
+  {
+    return false;
+  }
 
   t->mapid_next = 0;
 
@@ -499,10 +505,6 @@ load_segment (off_t ofs, uint8_t *upage,
   ASSERT (ofs % PGSIZE == 0);
 
   int pg_num = 0;
-  // printf("GOT READ BYTES %u\n", read_bytes);
-  // printf("UPAGE %p\n", upage);
-  // printf("ofs %u\n", ofs);
-  // printf("-------\n");
   size_t last_page_read_bytes = 0;
   while (read_bytes > 0 || zero_bytes > 0) 
     {
@@ -513,6 +515,9 @@ load_segment (off_t ofs, uint8_t *upage,
       size_t page_zero_bytes = PGSIZE - page_read_bytes;
           
       /* LAZY LOADING */
+      lock_acquire(&frame_lock);
+      struct thread *t = thread_current();
+      lock_acquire(&t->spt_lock);
       struct spt_entry *spe = malloc(sizeof(struct spt_entry));
       spe->upage = upage;
       spe->writable = writable;
@@ -520,19 +525,16 @@ load_segment (off_t ofs, uint8_t *upage,
       spe->absolute_off = ofs + last_page_read_bytes;
       spe->location = (page_read_bytes == 0) ? ALL_ZERO : FILE_SYS;
 
-      struct thread *t = thread_current();
       
-      lock_acquire(&t->spt_lock);
       struct hash_elem *he = insert_spe(&t->sp_table, spe);
       if (he)
       {
         // this means an equal element is already in the hash table
         update_spe(hash_entry(he, struct spt_entry, elem), spe);
         free(spe);
-        // ASSERT (hash_delete(&thread_current()->sp_table, he));
-        // insert_spe(&thread_current()->sp_table, spe);
       }
       lock_release(&t->spt_lock);
+      lock_release(&frame_lock);
 
       /* Advance. */
       read_bytes -= page_read_bytes;
@@ -549,7 +551,6 @@ load_segment (off_t ofs, uint8_t *upage,
 static bool
 setup_stack (void **esp, char *fn_copy, char *saveptr)
 {
-  // kpage = palloc_get_page (PAL_USER | PAL_ZERO);
   struct thread *t = thread_current();
   uint8_t *kpage = get_and_install_page(PAL_USER | PAL_ZERO, 
                        ((uint8_t *) PHYS_BASE) - PGSIZE,
@@ -557,18 +558,18 @@ setup_stack (void **esp, char *fn_copy, char *saveptr)
                        true, false, NULL, -1);
   ASSERT(kpage);
   if (kpage != NULL) 
-    {
-      // success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);
-      
+    { 
+      bool prev_frame = re_lock_acquire(&frame_lock);
+      lock_acquire(&t->spt_lock);
       *esp = PHYS_BASE;
       /* Establishing initial stack page for current thread */
       struct spt_entry * spe = malloc(sizeof(struct spt_entry));
       spe -> upage = ((uint8_t *) PHYS_BASE) - PGSIZE;
       spe -> location = STACK;
       spe -> writable = true;
-      lock_acquire(&t->spt_lock);
       ASSERT(!insert_spe(&t->sp_table, spe));
       lock_release(&t->spt_lock);
+      re_lock_release(&frame_lock, prev_frame);
 
       /* Total bytes required for stack setup */
       unsigned total_bytes = strlen(fn_copy) + 1;
