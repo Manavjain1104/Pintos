@@ -17,6 +17,7 @@ struct page_mmap_entry {
 struct file_mmap_entry {
     mapid_t mapping;
     struct file *file_pt; 
+    char file_name[MAX_FILE_NAME_SIZE];
     struct list *page_mmap_entries;
     struct hash_elem elem;
 };

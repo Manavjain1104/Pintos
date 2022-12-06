@@ -234,7 +234,7 @@ page_fault (struct intr_frame *f)
                      spe->upage,
                      t->pagedir,
                      spe->writable,
-                     spe->location==FILE_SYS,
+                     spe->location==FILE_SYS && !spe->writable,
                      t->file_name,
                      (spe->absolute_off - (spe->absolute_off % PGSIZE)) / PGSIZE);
 
@@ -339,7 +339,7 @@ page_fault (struct intr_frame *f)
 static bool 
 actual_load_page(struct spt_entry *spe)
 {  
-   // hygeine check
+   /* hygeine check */
    ASSERT (spe->location == FILE_SYS ||  spe->location == ALL_ZERO);
 
    struct thread *t = thread_current ();
@@ -354,7 +354,7 @@ actual_load_page(struct spt_entry *spe)
                            spe->upage, 
                            t->pagedir, 
                            spe->writable,
-                           spe->location == FILE_SYS,
+                           spe->location == FILE_SYS && !spe->writable,
                            t->file_name,
                            (spe->absolute_off - (spe->absolute_off % PGSIZE)) / PGSIZE);
    /* case when the get and install fails */
@@ -395,8 +395,8 @@ actual_load_mmap_page(struct page_mmap_entry *pentry)
                            t->pagedir, 
                            true,
                            true,
-                           NULL,
-                           -1);
+                           pentry->fentry->file_name,
+                           (pentry->offset - (pentry->offset % PGSIZE)) / PGSIZE);
    /* case when the get and install fails */
    if (kpage == NULL)
    { 
@@ -421,7 +421,7 @@ get_and_install_page(enum palloc_flags flags,
                      void *upage, 
                      uint32_t *pagedir, 
                      bool writable,
-                     bool is_filesys,
+                     bool sharable,
                      char *name,
                      unsigned int page_num)
 {
@@ -436,7 +436,7 @@ get_and_install_page(enum palloc_flags flags,
     frame_owner->t = thread_current();
     frame_owner->upage = upage;
 
-    if (is_filesys && !writable)
+    if (sharable)
     {
       void *kpage = find_sharing_entry(&share_table, name, page_num);
       if (kpage)
@@ -482,7 +482,7 @@ get_and_install_page(enum palloc_flags flags,
       return NULL; 
      }
 
-    if (is_filesys && !writable) {
+    if (sharable) {
       ASSERT(kframe_entry);
       kframe_entry->inner_entry 
          = insert_sharing_entry(&share_table, name, page_num, kpage);

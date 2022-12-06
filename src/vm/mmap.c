@@ -50,6 +50,7 @@ mapid_t insert_mmap(struct hash *page_mmap_table, struct hash *file_mmap_table,
     lock_acquire(&file_lock);
     fentry->mapping = allocate_mapid(thread_current());
     fentry->file_pt = file_reopen(fd_obj->file_pt);
+    strlcpy(fentry->file_name, fd_obj->file_name, MAX_FILE_NAME_SIZE);
     unsigned flength = file_length(fd_obj->file_pt);
     lock_release(&file_lock);
 

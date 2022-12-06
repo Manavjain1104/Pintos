@@ -16,6 +16,7 @@ extern struct lock file_lock;
 struct fd_st {
     int fd;
     struct file *file_pt;
+    char file_name[MAX_FILE_NAME_SIZE];
     struct list_elem elem;
 };
 

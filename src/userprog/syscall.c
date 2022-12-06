@@ -13,6 +13,7 @@
 #include "devices/shutdown.h"
 #include "devices/input.h"
 #include "lib/stdio.h"
+#include "lib/string.h"
 #include "userprog/pagedir.h"
 #include "vm/spt.h"
 #include "vm/mmap.h"
@@ -238,6 +239,7 @@ open_handler(struct intr_frame *f)
     free(fd_obj);
     delete_thread(-1);
   }
+  strlcpy(fd_obj->file_name, (char *) word, MAX_FILE_NAME_SIZE);
 
   fd_obj->file_pt = filesys_open((const char *)word);
   
