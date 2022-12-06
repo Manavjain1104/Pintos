@@ -160,8 +160,13 @@ palloc_get_page (enum palloc_flags flags)
   void *kpage =  palloc_get_multiple (flags, 1);
 
   if (flags & PAL_USER)
-  { 
+  {
+    printf("(PGP) Thread %d re-entrance acquire check on Frame lock\n", thread_current()->tid);
     bool prev_frame = re_lock_acquire(&frame_lock);
+    if (prev_frame)
+    {
+      printf("(PGP) Thread %d re-entrance acquired Frame lock\n", thread_current()->tid);
+    }
     if (kpage == NULL)
     {
       struct frame_entry *fe = evict_frame(&queue, &index);
@@ -181,6 +186,10 @@ palloc_get_page (enum palloc_flags flags)
       ASSERT(e);
       struct owner *frame_owner = list_entry(e, struct owner, elem);
       bool prev_spt = re_lock_acquire(&frame_owner->t->spt_lock);
+      if (prev_spt)
+      {
+        printf("(PGP) Thread %d acquired spt lock of %d \n", thread_current()->tid, frame_owner->t->tid);
+      }
       struct spt_entry *spe 
           = find_spe(&frame_owner->t->sp_table, frame_owner->upage);
       ASSERT(spe != NULL);
@@ -206,11 +215,19 @@ palloc_get_page (enum palloc_flags flags)
         ASSERT(fe->owners_list_size == 1);
 
         re_lock_release(&frame_owner->t->spt_lock, prev_spt);
+        if (prev_spt)
+        {
+          printf("(PGP) Thread %d released spt lock of %d \n", thread_current()->tid, frame_owner->t->tid);
+        }
         list_remove(&frame_owner->elem);
         free(frame_owner);
         ASSERT(!fe->inner_entry);
         fe->owners_list_size = 0;
         re_lock_release(&frame_lock, prev_frame);
+        if (prev_frame)
+        {
+          printf("(PGP) Thread %d released Frame lock\n", thread_current()->tid);
+        }
 
         if (!fe->kva && (flags & PAL_ASSERT))
         {
@@ -231,18 +248,30 @@ palloc_get_page (enum palloc_flags flags)
         ASSERT(fe->owners_list_size == 1);
 
         re_lock_release(&frame_owner->t->spt_lock, prev_spt);
+        if (prev_spt)
+        {
+          printf("(PGP) Thread %d released spt lock of %d \n", thread_current()->tid, frame_owner->t->tid);
+        }
         
         list_remove(&frame_owner->elem);
         free(frame_owner);
         ASSERT(!fe->inner_entry);
         fe->owners_list_size = 0;
         re_lock_release(&frame_lock, prev_frame);
+        if (prev_frame)
+        {
+          printf("(PGP) Thread %d released Frame lock\n", thread_current()->tid);
+        }
         return fe->kva;
       }
 
       // in the case of sharing - multiple owners
       ASSERT(spe->location == FILE_SYS)
       re_lock_release(&frame_owner->t->spt_lock, prev_spt);
+      if (prev_spt)
+      {
+        printf("(PGP) Thread %d released spt lock of %d \n", thread_current()->tid, frame_owner->t->tid);
+      }
 
       struct list_elem *temp;      
       for (; e != list_end (&fe->owners);)
@@ -265,12 +294,24 @@ palloc_get_page (enum palloc_flags flags)
       
       /* reset frame_entry for new page and remove sharing entry */
       bool prev_share = re_lock_acquire(&share_lock);
+      if (prev_share)
+      {
+        printf("(PGP) Thread %d acquired Share lock\n", thread_current()->tid);
+      }
       ASSERT(fe->inner_entry);
       delete_sharing_frame(&share_table, fe->inner_entry);
       re_lock_release(&share_lock, prev_share);
+      if (prev_share)
+      {
+        printf("(PGP) Thread %d released Share lock\n", thread_current()->tid);
+      }
       fe->inner_entry = NULL;
       fe->owners_list_size = 0;
       re_lock_release(&frame_lock, prev_frame);
+      if (prev_frame)
+      {
+        printf("(PGP) Thread %d released Frame lock\n", thread_current()->tid);
+      }
       return fe->kva;
     } 
 
@@ -282,6 +323,10 @@ palloc_get_page (enum palloc_flags flags)
     frame_pt->inner_entry = NULL;
     insert_frame(&frame_table, &queue, frame_pt);
     re_lock_release(&frame_lock, prev_frame);
+    if (prev_frame)
+    {
+      printf("(PGP) Thread %d released Frame lock\n", thread_current()->tid);
+    }
   }
   return kpage;
 }
@@ -320,7 +365,15 @@ palloc_free_page (void *page)
   if (page_from_pool (&user_pool, page))
   {
     bool prev_frame = re_lock_acquire(&frame_lock);
+    if (prev_frame)
+    {
+      printf("(PFP) Thread %d acquired Frame lock\n", thread_current()->tid);
+    }
     bool prev_share = re_lock_acquire(&share_lock);
+    if (prev_share)
+    {
+      printf("(PFP) Thread %d acquired share lock\n", thread_current()->tid);
+    }
 
     struct thread *t = thread_current();
     struct owner *owner_obj = NULL;
@@ -354,7 +407,15 @@ palloc_free_page (void *page)
       }
       ASSERT(free_frame(&frame_table, &queue, page, &index));
       re_lock_release(&share_lock, prev_share);
+      if (prev_share)
+      {
+        printf("(PFP) Thread %d released share lock\n", thread_current()->tid);
+      }
       re_lock_release(&frame_lock, prev_frame);
+      if (prev_frame)
+      {
+        printf("(PFP) Thread %d released Frame lock\n", thread_current()->tid);
+      }
     } else {
       if (t->pagedir)
       {
@@ -364,7 +425,15 @@ palloc_free_page (void *page)
       free(owner_obj);
 
       re_lock_release(&share_lock, prev_share);
+      if (prev_share)
+      {
+        printf("(PFP2) Thread %d released share lock\n", thread_current()->tid);
+      }
       re_lock_release(&frame_lock, prev_frame);
+      if (prev_frame)
+      {
+        printf("(PFP2) Thread %d released Frame lock\n", thread_current()->tid);
+      }
       return;
     }
   }
