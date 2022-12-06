@@ -161,11 +161,11 @@ palloc_get_page (enum palloc_flags flags)
 
   if (flags & PAL_USER)
   {
-    printf("(PGP) Thread %d re-entrance acquire check on Frame lock\n", thread_current()->tid);
+    // printf("(PGP) Thread %d re-entrance acquire check on Frame lock\n", thread_current()->tid);
     bool prev_frame = re_lock_acquire(&frame_lock);
     if (prev_frame)
     {
-      printf("(PGP) Thread %d re-entrance acquired Frame lock\n", thread_current()->tid);
+      // printf("(PGP) Thread %d re-entrance acquired Frame lock\n", thread_current()->tid);
     }
     if (kpage == NULL)
     {
@@ -188,7 +188,7 @@ palloc_get_page (enum palloc_flags flags)
       bool prev_spt = re_lock_acquire(&frame_owner->t->spt_lock);
       if (prev_spt)
       {
-        printf("(PGP) Thread %d acquired spt lock of %d \n", thread_current()->tid, frame_owner->t->tid);
+        // printf("(PGP) Thread %d acquired spt lock of %d \n", thread_current()->tid, frame_owner->t->tid);
       }
       struct spt_entry *spe 
           = find_spe(&frame_owner->t->sp_table, frame_owner->upage);
@@ -217,7 +217,7 @@ palloc_get_page (enum palloc_flags flags)
         re_lock_release(&frame_owner->t->spt_lock, prev_spt);
         if (prev_spt)
         {
-          printf("(PGP) Thread %d released spt lock of %d \n", thread_current()->tid, frame_owner->t->tid);
+          // printf("(PGP) Thread %d released spt lock of %d \n", thread_current()->tid, frame_owner->t->tid);
         }
         list_remove(&frame_owner->elem);
         free(frame_owner);
@@ -226,7 +226,7 @@ palloc_get_page (enum palloc_flags flags)
         re_lock_release(&frame_lock, prev_frame);
         if (prev_frame)
         {
-          printf("(PGP) Thread %d released Frame lock\n", thread_current()->tid);
+          // printf("(PGP) Thread %d released Frame lock\n", thread_current()->tid);
         }
 
         if (!fe->kva && (flags & PAL_ASSERT))
@@ -250,7 +250,7 @@ palloc_get_page (enum palloc_flags flags)
         re_lock_release(&frame_owner->t->spt_lock, prev_spt);
         if (prev_spt)
         {
-          printf("(PGP) Thread %d released spt lock of %d \n", thread_current()->tid, frame_owner->t->tid);
+          // printf("(PGP) Thread %d released spt lock of %d \n", thread_current()->tid, frame_owner->t->tid);
         }
         
         list_remove(&frame_owner->elem);
@@ -260,7 +260,7 @@ palloc_get_page (enum palloc_flags flags)
         re_lock_release(&frame_lock, prev_frame);
         if (prev_frame)
         {
-          printf("(PGP) Thread %d released Frame lock\n", thread_current()->tid);
+          // printf("(PGP) Thread %d released Frame lock\n", thread_current()->tid);
         }
         return fe->kva;
       }
@@ -270,7 +270,7 @@ palloc_get_page (enum palloc_flags flags)
       re_lock_release(&frame_owner->t->spt_lock, prev_spt);
       if (prev_spt)
       {
-        printf("(PGP) Thread %d released spt lock of %d \n", thread_current()->tid, frame_owner->t->tid);
+        // printf("(PGP) Thread %d released spt lock of %d \n", thread_current()->tid, frame_owner->t->tid);
       }
 
       struct list_elem *temp;      
@@ -296,21 +296,21 @@ palloc_get_page (enum palloc_flags flags)
       bool prev_share = re_lock_acquire(&share_lock);
       if (prev_share)
       {
-        printf("(PGP) Thread %d acquired Share lock\n", thread_current()->tid);
+        // printf("(PGP) Thread %d acquired Share lock\n", thread_current()->tid);
       }
       ASSERT(fe->inner_entry);
       delete_sharing_frame(&share_table, fe->inner_entry);
       re_lock_release(&share_lock, prev_share);
       if (prev_share)
       {
-        printf("(PGP) Thread %d released Share lock\n", thread_current()->tid);
+        // printf("(PGP) Thread %d released Share lock\n", thread_current()->tid);
       }
       fe->inner_entry = NULL;
       fe->owners_list_size = 0;
       re_lock_release(&frame_lock, prev_frame);
       if (prev_frame)
       {
-        printf("(PGP) Thread %d released Frame lock\n", thread_current()->tid);
+        // printf("(PGP) Thread %d released Frame lock\n", thread_current()->tid);
       }
       return fe->kva;
     } 
@@ -325,7 +325,7 @@ palloc_get_page (enum palloc_flags flags)
     re_lock_release(&frame_lock, prev_frame);
     if (prev_frame)
     {
-      printf("(PGP) Thread %d released Frame lock\n", thread_current()->tid);
+      // printf("(PGP) Thread %d released Frame lock\n", thread_current()->tid);
     }
   }
   return kpage;
@@ -367,12 +367,12 @@ palloc_free_page (void *page)
     bool prev_frame = re_lock_acquire(&frame_lock);
     if (prev_frame)
     {
-      printf("(PFP) Thread %d acquired Frame lock\n", thread_current()->tid);
+      // printf("(PFP) Thread %d acquired Frame lock\n", thread_current()->tid);
     }
     bool prev_share = re_lock_acquire(&share_lock);
     if (prev_share)
     {
-      printf("(PFP) Thread %d acquired share lock\n", thread_current()->tid);
+      // printf("(PFP) Thread %d acquired share lock\n", thread_current()->tid);
     }
 
     struct thread *t = thread_current();
@@ -409,12 +409,12 @@ palloc_free_page (void *page)
       re_lock_release(&share_lock, prev_share);
       if (prev_share)
       {
-        printf("(PFP) Thread %d released share lock\n", thread_current()->tid);
+        // printf("(PFP) Thread %d released share lock\n", thread_current()->tid);
       }
       re_lock_release(&frame_lock, prev_frame);
       if (prev_frame)
       {
-        printf("(PFP) Thread %d released Frame lock\n", thread_current()->tid);
+        // printf("(PFP) Thread %d released Frame lock\n", thread_current()->tid);
       }
     } else {
       if (t->pagedir)
@@ -425,15 +425,15 @@ palloc_free_page (void *page)
       free(owner_obj);
 
       re_lock_release(&share_lock, prev_share);
-      if (prev_share)
-      {
-        printf("(PFP2) Thread %d released share lock\n", thread_current()->tid);
-      }
+      // if (prev_share)
+      // {
+      //   printf("(PFP2) Thread %d released share lock\n", thread_current()->tid);
+      // }
       re_lock_release(&frame_lock, prev_frame);
-      if (prev_frame)
-      {
-        printf("(PFP2) Thread %d released Frame lock\n", thread_current()->tid);
-      }
+      // if (prev_frame)
+      // {
+      //   printf("(PFP2) Thread %d released Frame lock\n", thread_current()->tid);
+      // }
       return;
     }
   }

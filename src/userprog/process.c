@@ -303,9 +303,9 @@ load (char *file_name, void (**eip) (void), void **esp)
 
   /* supplemental page table intialisation */
   lock_init(&t->spt_lock);
-  printf ("(Load) Thread %d acquiring Frame Lock \n", thread_current()->tid);
+  // printf ("(Load) Thread %d acquiring Frame Lock \n", thread_current()->tid);
   lock_acquire(&frame_lock);
-  printf ("(Load) Thread %d got Frame Lock \n", thread_current()->tid);
+  // printf ("(Load) Thread %d got Frame Lock \n", thread_current()->tid);
   lock_acquire(&t->spt_lock);
   if (!generate_spt_table(&t->sp_table))
   {
@@ -329,9 +329,9 @@ load (char *file_name, void (**eip) (void), void **esp)
   char *saveptr;
 
   /* Open executable file. */
-  printf ("(Load) Thread %d acquiring File Lock \n", thread_current()->tid);
+  // printf ("(Load) Thread %d acquiring File Lock \n", thread_current()->tid);
   lock_acquire(&file_lock);
-  printf ("(Load) Thread %d got File Lock \n", thread_current()->tid);
+  // printf ("(Load) Thread %d got File Lock \n", thread_current()->tid);
   file = filesys_open (strtok_r(file_name, " ", &saveptr));
   if (file == NULL) 
     {
@@ -436,9 +436,9 @@ load (char *file_name, void (**eip) (void), void **esp)
   /* We arrive here whether the load is successful or not. */
   file_close (file);
   lock_release(&file_lock);
-  printf ("Thread %d released File Lock \n", thread_current()->tid);
+  // printf ("Thread %d released File Lock \n", thread_current()->tid);
   lock_release(&frame_lock);
-  printf ("Thread %d released Frame Lock \n", thread_current()->tid);
+  // printf ("Thread %d released Frame Lock \n", thread_current()->tid);
   return success;
 }
 
@@ -524,13 +524,13 @@ load_segment (off_t ofs, uint8_t *upage,
       size_t page_zero_bytes = PGSIZE - page_read_bytes;
           
       /* LAZY LOADING */
-      // printf("(LS) Thread %d aquiring frame lock\n", thread_current()->tid);
+      // // printf("(LS) Thread %d aquiring frame lock\n", thread_current()->tid);
       // lock_acquire(&frame_lock);
-      // printf("(LS) Thread %d aquired frame lock\n", thread_current()->tid);
+      // // printf("(LS) Thread %d aquired frame lock\n", thread_current()->tid);
       struct thread *t = thread_current();
-      printf("(LS) Thread %d aquiring spt lock on %d\n", t->tid, t->tid);
+      // printf("(LS) Thread %d aquiring spt lock on %d\n", t->tid, t->tid);
       lock_acquire(&t->spt_lock);
-      printf("(LS) Thread %d aquired spt lock on %d\n", t->tid, t->tid);
+      // printf("(LS) Thread %d aquired spt lock on %d\n", t->tid, t->tid);
       struct spt_entry *spe = malloc(sizeof(struct spt_entry));
       spe->upage = upage;
       spe->writable = writable;
@@ -547,9 +547,9 @@ load_segment (off_t ofs, uint8_t *upage,
         free(spe);
       }
       lock_release(&t->spt_lock);
-      printf("(LS) Thread %d released spt lock on %d\n", thread_current()->tid, t->tid);
+      // printf("(LS) Thread %d released spt lock on %d\n", thread_current()->tid, t->tid);
       // lock_release(&frame_lock);
-      // printf("(LS) Thread %d released frame lock\n", thread_current()->tid);
+      // // printf("(LS) Thread %d released frame lock\n", thread_current()->tid);
 
       /* Advance. */
       read_bytes -= page_read_bytes;
@@ -579,9 +579,9 @@ setup_stack (void **esp, char *fn_copy, char *saveptr)
       // {
       //     printf("(SS) Thread %d aquired frame lock\n", thread_current()->tid);
       // }
-      printf("(SS) Thread %d aquiring spt lock on %d\n", thread_current()->tid, t->tid);
+      // printf("(SS) Thread %d aquiring spt lock on %d\n", thread_current()->tid, t->tid);
       lock_acquire(&t->spt_lock);
-      printf("(SS) Thread %d aquired spt lock on %d\n", thread_current()->tid, t->tid);
+      // printf("(SS) Thread %d aquired spt lock on %d\n", thread_current()->tid, t->tid);
       *esp = PHYS_BASE;
       /* Establishing initial stack page for current thread */
       struct spt_entry * spe = malloc(sizeof(struct spt_entry));
@@ -590,7 +590,7 @@ setup_stack (void **esp, char *fn_copy, char *saveptr)
       spe -> writable = true;
       ASSERT(!insert_spe(&t->sp_table, spe));
       lock_release(&t->spt_lock);
-      printf("(SS) Thread %d released spt lock on %d\n", thread_current()->tid, t->tid);
+      // printf("(SS) Thread %d released spt lock on %d\n", thread_current()->tid, t->tid);
       // re_lock_release(&frame_lock, prev_frame);
       // if (prev_frame)
       // {

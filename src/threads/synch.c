@@ -459,7 +459,7 @@ bool re_lock_acquire (struct lock * lock)
   bool prev = !lock_held_by_current_thread (lock);
   if (prev)
   {
-    printf("Aquiring\n");
+    // printf("Aquiring\n");
     lock_acquire (lock);
   }
   return prev;
