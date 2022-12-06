@@ -380,7 +380,12 @@ thread_exit (void)
     temp = e;
     e = list_next(e);
     list_remove(temp);
-    lock_release(list_entry(e, struct lock, elem));
+    struct lock *l = list_entry(e, struct lock, elem);
+    if (lock_held_by_current_thread(l))
+    {
+      lock_release(l);
+    }
+    // lock_release(list_entry(e, struct lock, elem));
   }
 
   enum intr_level old_level = intr_disable ();

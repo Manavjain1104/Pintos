@@ -188,12 +188,13 @@ page_fault (struct intr_frame *f)
   /* check SPT if page was not present */
   if (not_present)
    {
+      lock_acquire(&frame_lock);
+      lock_acquire(&t->spt_lock);
       struct hash spt = t->sp_table;
       struct spt_entry fake_sptentry;
       void *fault_upage = pg_round_down(fault_addr);
       fake_sptentry.upage = fault_upage;
 
-      lock_acquire(&t->spt_lock);
       struct hash_elem *found = hash_find (&spt, &fake_sptentry.elem);
       /* Use SPT data to handle page fault */
       if (found)
@@ -204,6 +205,7 @@ page_fault (struct intr_frame *f)
             // user tried to write to a read only page
             printf("user write to read only page\n");
             lock_release(&t->spt_lock);
+            lock_release(&frame_lock);
             goto failure;
          }
 
@@ -215,6 +217,7 @@ page_fault (struct intr_frame *f)
             {  
                printf("Failed to load spt page entry at addr: %p\n", fault_addr);
                lock_release(&t->spt_lock);
+               lock_release(&frame_lock);
                goto failure;
             }
          } 
@@ -237,16 +240,17 @@ page_fault (struct intr_frame *f)
                if (!kpage)
                {
                   printf ("Could not allocate page during swap in \n");
+                  lock_release(&t->spt_lock);
+                  lock_release(&frame_lock);
                   goto failure;
                }
                swap_in (kpage, spe->swap_slot);
                pagedir_set_dirty(t->pagedir, spe->upage, true);
-               // printf("SWAP IN: %u and kpage : %x, upage: %p\n", spe->swap_slot, *(int *)kpage, spe->upage);
          }
          lock_release(&t->spt_lock);
+         lock_release(&frame_lock);
          return;
       }
-
 
       /* Page not found in supplemental page table.
          Now checking whether page corresponds to memory mapped file */
@@ -259,6 +263,7 @@ page_fault (struct intr_frame *f)
             NOT_REACHED();
          }
          lock_release(&t->spt_lock);
+         lock_release(&frame_lock);
          return;
       }
 
@@ -274,7 +279,8 @@ page_fault (struct intr_frame *f)
          //   printf("diff: %u \n",(PHYS_BASE - next_upage));
            if ((unsigned) (PHYS_BASE - next_upage) > (unsigned) STACK_MAX_SIZE)
            {
-               // printf("lolol \n");
+               lock_release(&t->spt_lock);
+               lock_release(&frame_lock);
                delete_thread(-1);
            }
            uint8_t *k_new_page = get_and_install_page(PAL_USER | PAL_ZERO, 
@@ -289,6 +295,7 @@ page_fault (struct intr_frame *f)
            {
               printf("Cound not allocate new page for stack\n");
               lock_release(&t->spt_lock);
+              lock_release(&frame_lock);
               goto failure;
            }
 
@@ -300,10 +307,13 @@ page_fault (struct intr_frame *f)
           spe -> writable = true;
           ASSERT(!insert_spe(&thread_current()->sp_table, spe));
           lock_release(&t->spt_lock);
+          lock_release(&frame_lock);
           return;
         }
       }
-    }
+      lock_release(&t->spt_lock);
+      lock_release(&frame_lock);
+   }
 
  failure:
 
@@ -420,13 +430,14 @@ get_and_install_page(enum palloc_flags flags,
 
    if (kpage == NULL)
    {
+    bool prev_frame = re_lock_acquire(&frame_lock);
+
     struct owner *frame_owner = malloc(sizeof(struct owner));
     frame_owner->t = thread_current();
     frame_owner->upage = upage;
 
     if (is_filesys && !writable)
     {
-      lock_acquire(&frame_lock);
       lock_acquire(&share_lock);
       void *kpage = find_sharing_entry(&share_table, name, page_num);
       if (kpage)
@@ -435,62 +446,50 @@ get_and_install_page(enum palloc_flags flags,
         if (!install_page (upage, kpage, writable)) 
         {
           free(frame_owner);
+          lock_release(&share_lock);
+          re_lock_release(&frame_lock, prev_frame);
           return NULL; 
         }
         struct frame_entry *kframe_entry = find_frame_entry(&frame_table, kpage);
         list_push_back(&kframe_entry->owners, &frame_owner->elem);
         kframe_entry->owners_list_size++;
         lock_release(&share_lock);
-        lock_release(&frame_lock);
+        re_lock_release(&frame_lock, prev_frame);
         return kpage;
       }      
       lock_release(&share_lock);
-      lock_release(&frame_lock);
     }
 
    /* Get a new page of memory. */
-   // lock_acquire(&l);
    kpage = palloc_get_page (flags);
-   // if (kpage == (void *)0xc027c000)
-   // {
-   //    printf("returned 0xc027c000\n");
-   // }
-   // lock_release(&l);
    if (kpage == NULL)
    {   
     free(frame_owner);
+    re_lock_release(&frame_lock, prev_frame);
     return NULL;
    }
     
    struct frame_entry *kframe_entry;
-
-   lock_acquire(&frame_lock);
    kframe_entry = find_frame_entry(&frame_table, kpage);
    list_push_back(&kframe_entry->owners, &frame_owner->elem);
    kframe_entry->owners_list_size++;
-   // if (kpage == (void *)0xc027c000)
-   // {
-   //    // printf("inc 0xc027c000\n");
-   // }
-   lock_release(&frame_lock);
-
 
      /* Add the page to the process's address space. */
      if (!install_page (upage, kpage, writable)) 
      {
       palloc_free_page (kpage);
+      re_lock_release(&frame_lock, prev_frame);
       return NULL; 
      }
 
     if (is_filesys && !writable) {
-      lock_acquire(&frame_lock);
       lock_acquire(&share_lock);
       ASSERT(kframe_entry);
       kframe_entry->inner_entry 
          = insert_sharing_entry(&share_table, name, page_num, kpage);
       lock_release(&share_lock);
-      lock_release(&frame_lock);
     }
+    re_lock_release(&frame_lock, prev_frame);
    } 
    else 
    {  
