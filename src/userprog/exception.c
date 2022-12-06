@@ -188,25 +188,23 @@ page_fault (struct intr_frame *f)
   /* check SPT if page was not present */
   if (not_present)
    {
-      // printf("(not present) Thread %d acquiring frame lock\n", thread_current()->tid);
       lock_acquire(&frame_lock);
-      // printf("(not present) Thread %d acquired frame lock\n", thread_current()->tid);
-      // printf("(not present) Thread %d acquiring spt lock of %d\n", thread_current()->tid, thread_current()->tid);
       lock_acquire(&t->spt_lock);
-      // printf("(not present) Thread %d acquired spt lock of %d\n", thread_current()->tid, thread_current()->tid);
+
       struct hash spt = t->sp_table;
       struct spt_entry fake_sptentry;
       void *fault_upage = pg_round_down(fault_addr);
       fake_sptentry.upage = fault_upage;
-
-      struct hash_elem *found = hash_find (&spt, &fake_sptentry.elem);
+      struct
+       hash_elem *found = hash_find (&spt, &fake_sptentry.elem);
+     
       /* Use SPT data to handle page fault */
       if (found)
       {
          struct spt_entry *spe = hash_entry(found, struct spt_entry, elem);
          if (!spe->writable && write)
          {
-            // user tried to write to a read only page
+            /* User tried to write to a read only page */
             printf("user write to read only page\n");
             lock_release(&t->spt_lock);
             lock_release(&frame_lock);
@@ -216,7 +214,6 @@ page_fault (struct intr_frame *f)
          /* Code reaching here indicates that access was valid, load neccesary */ 
          if (spe->location == FILE_SYS || spe->location == ALL_ZERO)
          {
-            // printf("LAZY LOAD : %p\n", spe->upage);
             if (!actual_load_page(spe))
             {  
                printf("Failed to load spt page entry at addr: %p\n", fault_addr);
@@ -224,38 +221,35 @@ page_fault (struct intr_frame *f)
                lock_release(&frame_lock);
                goto failure;
             }
-            // printf("Thread %d returned from actual load page\n", t->tid);
          } 
          else
          {
-               /* Page must exist in a swap slot */
-               ASSERT (spe->location == SWAP_SLOT);
+            /* Page must exist in a swap slot */
+            ASSERT (spe->location == SWAP_SLOT);
 
-               // void *kpage = palloc_get_page(PAL_USER);
-               spe->location = spe->location_prev;
-               void *kpage = get_and_install_page(
-                        PAL_USER,
-                        spe->upage,
-                        t->pagedir,
-                        spe->writable,
-                        spe->location==FILE_SYS,
-                        t->file_name,
-                        (spe->absolute_off - (spe->absolute_off % PGSIZE)) / PGSIZE);
+            // void *kpage = palloc_get_page(PAL_USER);
+            spe->location = spe->location_prev;
+            void *kpage = get_and_install_page(
+                     PAL_USER,
+                     spe->upage,
+                     t->pagedir,
+                     spe->writable,
+                     spe->location==FILE_SYS,
+                     t->file_name,
+                     (spe->absolute_off - (spe->absolute_off % PGSIZE)) / PGSIZE);
 
-               if (!kpage)
-               {
-                  printf ("Could not allocate page during swap in \n");
-                  lock_release(&t->spt_lock);
-                  lock_release(&frame_lock);
-                  goto failure;
-               }
-               swap_in (kpage, spe->swap_slot);
-               pagedir_set_dirty(t->pagedir, spe->upage, true);
+            if (!kpage)
+            {
+               printf ("Could not allocate page during swap in \n");
+               lock_release(&t->spt_lock);
+               lock_release(&frame_lock);
+               goto failure;
+            }
+            swap_in (kpage, spe->swap_slot);
+            pagedir_set_dirty(t->pagedir, spe->upage, true);
          }
          lock_release(&t->spt_lock);
-         // printf("(not present) Thread %d released spt lock of %d\n", thread_current()->tid, thread_current()->tid);
          lock_release(&frame_lock);
-         // printf("(not present) Thread %d released frame lock\n", thread_current()->tid);
          return;
       }
 
@@ -311,18 +305,15 @@ page_fault (struct intr_frame *f)
           spe -> upage = next_upage;
           spe -> location = STACK;
           spe -> writable = true;
+          
           ASSERT(!insert_spe(&thread_current()->sp_table, spe));
           lock_release(&t->spt_lock);
-          // printf("(not present stack) Thread %d released spt lock of %d\n", thread_current()->tid, thread_current()->tid);
           lock_release(&frame_lock);
-          // printf("(not present stack) Thread %d released frame lock\n", thread_current()->tid);
           return;
         }
       }
       lock_release(&t->spt_lock);
-      // printf("(not present) Thread %d released spt lock of %d\n", thread_current()->tid, thread_current()->tid);
       lock_release(&frame_lock);
-      // printf("(not present) Thread %d released frame lock\n", thread_current()->tid);
    }
 
  failure:
@@ -359,7 +350,6 @@ actual_load_page(struct spt_entry *spe)
       flags |= PAL_ZERO;
    }
 
-   // printf("Current Thread %d is in actual load page\n", t->tid);
    kpage = get_and_install_page(flags, 
                            spe->upage, 
                            t->pagedir, 
@@ -367,29 +357,20 @@ actual_load_page(struct spt_entry *spe)
                            spe->location == FILE_SYS,
                            t->file_name,
                            (spe->absolute_off - (spe->absolute_off % PGSIZE)) / PGSIZE);
-   // printf("here at actual load page right after gni call\n"); 
    /* case when the get and install fails */
    if (kpage == NULL)
    { 
       return false;
    } 
-   // printf("here at actual load page kpage not null\n"); 
    if (spe->location == ALL_ZERO)
    {
       return true;
    }
-   // printf("here at actual load page not all zero\n"); 
 
 
    /* Load data into the page. */
    struct file *fp = t->exec_file;
-   // if (file_lock.holder)
-   // {
-   //    printf("file lock holder is %d \n", file_lock.holder->tid);
-   // }
-   lock_acquire(&file_lock);  // ISSUE !!! BACKTRACE 5 how it got that file_lock before frame_lock
-   // printf("Thread %d aquired file lock\n", thread_current()->tid);
-   // printf("file_length is %u and abs-off is %u and read bytes %u\n", file_length(fp), spe->absolute_off, spe->page_read_bytes);
+   lock_acquire(&file_lock);  
    file_seek(fp, spe->absolute_off);
    off_t s;
    if ((s = file_read (fp, kpage, spe->page_read_bytes)) 
@@ -448,15 +429,8 @@ get_and_install_page(enum palloc_flags flags,
 
    if (kpage == NULL)
    {
-    // printf("(GnI)Thread %d re-entrant checl on Frame lock\n", thread_current()->tid);
     bool prev_frame = re_lock_acquire(&frame_lock);
-    if (prev_frame)
-    {
-      // printf("(GnI)Thread %d got frame lock\n", thread_current()->tid);
-    }
-    // printf("(GnI)Thread %d trying to get share lock\n", thread_current()->tid);
     lock_acquire(&share_lock);
-    // printf("(GnI)Thread %d got share lock\n", thread_current()->tid);
 
     struct owner *frame_owner = malloc(sizeof(struct owner));
     frame_owner->t = thread_current();
@@ -479,13 +453,7 @@ get_and_install_page(enum palloc_flags flags,
         list_push_back(&kframe_entry->owners, &frame_owner->elem);
         kframe_entry->owners_list_size++;
         lock_release(&share_lock);
-        // printf("(GnI1)Thread %d released share lock\n", thread_current()->tid);
-        // printf("(GnI1)Thread %d re-entrant check on frame lock\n", thread_current()->tid);
         re_lock_release(&frame_lock, prev_frame);
-        if (prev_frame)
-        {
-          // printf("(GnI1)Thread %d released frame lock\n", thread_current()->tid);
-        }
         return kpage;
       }      
     }
@@ -520,13 +488,7 @@ get_and_install_page(enum palloc_flags flags,
          = insert_sharing_entry(&share_table, name, page_num, kpage);
     }
      lock_release(&share_lock);
-     // printf("(GnI2)Thread %d released share lock\n", thread_current()->tid);
-     // printf("(GnI2)Thread %d re-entrant check on frame lock\n", thread_current()->tid);
      re_lock_release(&frame_lock, prev_frame);
-     if (prev_frame)
-     {
-         // printf("(GnI2)Thread %d released frame lock\n", thread_current()->tid);
-     }
    } 
    else 
    {  
@@ -536,6 +498,5 @@ get_and_install_page(enum palloc_flags flags,
        pagedir_set_writable(pagedir, upage, writable); 
       }
    }
-   // printf("Thread %d returning from Get and Install Page\n", thread_current()->tid);
    return kpage;
 }

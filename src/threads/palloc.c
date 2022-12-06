@@ -70,7 +70,6 @@ struct lock share_lock;
 void
 palloc_init (size_t user_page_limit)
 {
-  printf("PALLOC ININTIT\n");
   /* Free memory starts at 1 MB and runs to the end of RAM. */
   uint8_t *free_start = ptov (1024 * 1024);
   uint8_t *free_end = ptov (init_ram_pages * PGSIZE);
@@ -86,7 +85,7 @@ palloc_init (size_t user_page_limit)
   init_pool (&user_pool, free_start + kernel_pages * PGSIZE,
              user_pages, "user pool");
 
-  /* initialise the frame table */
+  /* Initialise the frame table */
   if (!generate_frame_table(&frame_table))
   {
     PANIC("Could not generate frame table! \n");
@@ -95,15 +94,13 @@ palloc_init (size_t user_page_limit)
   list_init(&queue);
   index = list_begin(&queue);
 
-  /* initialise the frame table */
+  /* Initialise the frame table */
   if (!generate_sharing_table(&share_table))
   {
     PANIC("Could not generate sharing table! \n");
   }
 
-  /* initialise the swap space */
-  printf("INIT SWAPPING \n");
-
+  /* Initialise the swap space */
   lock_init(&share_lock);
   lock_init(&frame_lock);
 }
@@ -161,12 +158,7 @@ palloc_get_page (enum palloc_flags flags)
 
   if (flags & PAL_USER)
   {
-    // printf("(PGP) Thread %d re-entrance acquire check on Frame lock\n", thread_current()->tid);
     bool prev_frame = re_lock_acquire(&frame_lock);
-    if (prev_frame)
-    {
-      // printf("(PGP) Thread %d re-entrance acquired Frame lock\n", thread_current()->tid);
-    }
     if (kpage == NULL)
     {
       struct frame_entry *fe = evict_frame(&queue, &index);
@@ -180,54 +172,40 @@ palloc_get_page (enum palloc_flags flags)
         return NULL;
       }
 
-      /* signal for swapping/free, remove */
+      /* Signal for swapping/free, remove */
       ASSERT(fe->owners_list_size > 0);
       struct list_elem *e = list_begin(&fe->owners);
-      ASSERT(e);
       struct owner *frame_owner = list_entry(e, struct owner, elem);
       bool prev_spt = re_lock_acquire(&frame_owner->t->spt_lock);
-      if (prev_spt)
-      {
-        // printf("(PGP) Thread %d acquired spt lock of %d \n", thread_current()->tid, frame_owner->t->tid);
-      }
       struct spt_entry *spe 
           = find_spe(&frame_owner->t->sp_table, frame_owner->upage);
-      ASSERT(spe != NULL);
 
-      /* page can be swapped if dirty */
+      /* Page can be swapped if dirty */
       if (pagedir_is_writable(frame_owner->t->pagedir, frame_owner->upage))
       {
-        // hence not sharable
+        /* Checking for sharability */
         if (pagedir_is_dirty(frame_owner->t->pagedir, frame_owner->upage))
         {
-          // swap
+          /* Page swapping */ 
           spe->location_prev = spe->location;
           spe->location = SWAP_SLOT;
           spe->swap_slot = swap_out(fe->kva);
-          // printf("swap out: %u kpage bytes: %x\n", spe->swap_slot, * (int *)fe->kva);
         }
-        /* reset frame_entry for new page */
+
+        /* Reset frame_entry for new page */
         if (flags & PAL_ZERO)
         {
           memset(fe->kva, 0,PGSIZE); 
         }
+
         pagedir_clear_page(frame_owner->t->pagedir, frame_owner->upage);
         ASSERT(fe->owners_list_size == 1);
 
         re_lock_release(&frame_owner->t->spt_lock, prev_spt);
-        if (prev_spt)
-        {
-          // printf("(PGP) Thread %d released spt lock of %d \n", thread_current()->tid, frame_owner->t->tid);
-        }
         list_remove(&frame_owner->elem);
         free(frame_owner);
-        ASSERT(!fe->inner_entry);
         fe->owners_list_size = 0;
         re_lock_release(&frame_lock, prev_frame);
-        if (prev_frame)
-        {
-          // printf("(PGP) Thread %d released Frame lock\n", thread_current()->tid);
-        }
 
         if (!fe->kva && (flags & PAL_ASSERT))
         {
@@ -236,7 +214,7 @@ palloc_get_page (enum palloc_flags flags)
         return fe->kva;
       }
       
-      // in the case of sharing - multiple owners or ALL_ZERO pages
+      /* In the case of sharing - multiple owners or ALL_ZERO pages */ 
       ASSERT(spe->location == FILE_SYS || spe->location == ALL_ZERO)
       re_lock_release(&frame_owner->t->spt_lock, prev_spt);
 
@@ -247,7 +225,7 @@ palloc_get_page (enum palloc_flags flags)
         e = list_next(e);
         struct owner *o = list_entry(temp, struct owner, elem);
 
-        /* reset frame_entry for new page */
+        /* Reset frame_entry for new page */
         if (flags & PAL_ZERO)
         {
           memset(fe->kva, 0,PGSIZE); 
@@ -258,7 +236,7 @@ palloc_get_page (enum palloc_flags flags)
         free(o);
       }
       
-      /* reset frame_entry for new page and remove sharing entry */
+      /* Reset frame_entry for new page and remove sharing entry */
       fe->owners_list_size = 0;
       bool prev_share = re_lock_acquire(&share_lock);
       delete_sharing_frame(&share_table, fe->inner_entry);
@@ -269,7 +247,7 @@ palloc_get_page (enum palloc_flags flags)
       return fe->kva;
     } 
 
-    /* insert new entry into page table */
+    /* Insert new entry into page table */
     struct frame_entry *frame_pt  = malloc(sizeof(struct frame_entry));
     list_init (&frame_pt->owners);
     frame_pt->kva = kpage;
@@ -277,10 +255,6 @@ palloc_get_page (enum palloc_flags flags)
     frame_pt->inner_entry = NULL;
     insert_frame(&frame_table, &queue, frame_pt);
     re_lock_release(&frame_lock, prev_frame);
-    if (prev_frame)
-    {
-      // printf("(PGP) Thread %d released Frame lock\n", thread_current()->tid);
-    }
   }
   return kpage;
 }
@@ -319,15 +293,7 @@ palloc_free_page (void *page)
   if (page_from_pool (&user_pool, page))
   {
     bool prev_frame = re_lock_acquire(&frame_lock);
-    if (prev_frame)
-    {
-      // printf("(PFP) Thread %d acquired Frame lock\n", thread_current()->tid);
-    }
     bool prev_share = re_lock_acquire(&share_lock);
-    if (prev_share)
-    {
-      // printf("(PFP) Thread %d acquired share lock\n", thread_current()->tid);
-    }
 
     struct thread *t = thread_current();
     struct owner *owner_obj = NULL;
@@ -352,42 +318,27 @@ palloc_free_page (void *page)
       kframe_entry->owners_list_size--;
     }
     
-    if (kframe_entry->owners_list_size == 0) { 
-      if (kframe_entry->inner_entry) {
+    if (kframe_entry->owners_list_size == 0) 
+    { 
+      if (kframe_entry->inner_entry) 
+      {
         ASSERT(delete_sharing_frame(&share_table, kframe_entry->inner_entry));
-
-        ASSERT(owner_obj);
         free(owner_obj);
       }
+      
       ASSERT(free_frame(&frame_table, &queue, page, &index));
       re_lock_release(&share_lock, prev_share);
-      if (prev_share)
-      {
-        // printf("(PFP) Thread %d released share lock\n", thread_current()->tid);
-      }
       re_lock_release(&frame_lock, prev_frame);
-      if (prev_frame)
-      {
-        // printf("(PFP) Thread %d released Frame lock\n", thread_current()->tid);
-      }
-    } else {
+    } else 
+    {
       if (t->pagedir)
       {
         pagedir_clear_page(t->pagedir, owner_obj->upage);
       }
-      ASSERT(owner_obj);
       free(owner_obj);
 
       re_lock_release(&share_lock, prev_share);
-      // if (prev_share)
-      // {
-      //   printf("(PFP2) Thread %d released share lock\n", thread_current()->tid);
-      // }
       re_lock_release(&frame_lock, prev_frame);
-      // if (prev_frame)
-      // {
-      //   printf("(PFP2) Thread %d released Frame lock\n", thread_current()->tid);
-      // }
       return;
     }
   }
