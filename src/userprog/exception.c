@@ -18,8 +18,6 @@
 /* Number of page faults processed. */
 static long long page_fault_cnt;
 
-static struct lock l;
-
 static void kill (struct intr_frame *);
 static void page_fault (struct intr_frame *);
 static bool actual_load_page(struct spt_entry *spe);
@@ -70,8 +68,6 @@ exception_init (void)
      We need to disable interrupts for page faults because the
      fault address is stored in CR2 and needs to be preserved. */
   intr_register_int (14, 0, INTR_OFF, page_fault, "#PF Page-Fault Exception");
-
-  lock_init(&l);
 }
 
 /* Prints exception statistics. */

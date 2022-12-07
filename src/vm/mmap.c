@@ -8,6 +8,7 @@
 #include "threads/synch.h"
 #include "userprog/pagedir.h"
 #include "lib/kernel/list.h"
+#include "lib/string.h"
 
 static unsigned page_mmap_hash_func(const struct hash_elem *e, void *aux UNUSED);
 static bool page_mmap_less_func (const struct hash_elem *a, 

@@ -11,6 +11,7 @@
 #include "threads/synch.h"
 #include "threads/vaddr.h"
 #include "threads/thread.h"
+#include "threads/interrupt.h"
 #include "threads/malloc.h"
 #include "vm/frame.h"
 #include "devices/swap.h"
@@ -160,8 +161,21 @@ palloc_get_page (enum palloc_flags flags)
   {
     bool prev_frame = re_lock_acquire(&frame_lock);
     if (kpage == NULL)
-    {
+    { 
+      /* disable interrupts, select frame for eviction and page_dir_clear */
+      enum intr_level old_level = intr_disable();
       struct frame_entry *fe = evict_frame(&queue, &index);
+      struct list_elem *e;
+      for (e = list_begin(&fe->owners); 
+           e != list_end (&fe->owners);
+           e = list_next(e))
+      {
+        struct owner *o = list_entry(e, struct owner, elem);
+        pagedir_clear_page(o->t->pagedir, o->upage);
+      }
+      intr_set_level(old_level);
+
+
       if (!fe)                                                  
       {
         re_lock_release(&frame_lock, prev_frame);
@@ -174,7 +188,7 @@ palloc_get_page (enum palloc_flags flags)
 
       /* Signal for swapping/free, remove */
       ASSERT(fe->owners_list_size > 0);
-      struct list_elem *e = list_begin(&fe->owners);
+      e = list_begin(&fe->owners);
       struct owner *frame_owner = list_entry(e, struct owner, elem);
       bool prev_spt = re_lock_acquire(&frame_owner->t->spt_lock);
       struct spt_entry *spe 
@@ -198,7 +212,6 @@ palloc_get_page (enum palloc_flags flags)
           memset(fe->kva, 0,PGSIZE); 
         }
 
-        pagedir_clear_page(frame_owner->t->pagedir, frame_owner->upage);
         ASSERT(fe->owners_list_size == 1);
 
         re_lock_release(&frame_owner->t->spt_lock, prev_spt);
@@ -228,10 +241,9 @@ palloc_get_page (enum palloc_flags flags)
         /* Reset frame_entry for new page */
         if (flags & PAL_ZERO)
         {
-          memset(fe->kva, 0,PGSIZE); 
+          memset(fe->kva, 0, PGSIZE); 
         }
 
-        pagedir_clear_page(o->t->pagedir, o->upage);
         list_remove(temp);
         free(o);
       }
